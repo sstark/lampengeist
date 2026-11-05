@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -30,20 +29,53 @@ const (
 	Other    RoomKind = "other"
 )
 
-// Window is a period during which a set of room categories is in use.
-type Window struct {
-	StartMinute     int // minutes since midnight
-	DurationMinutes int
-	Rooms           []RoomKind
+// roomOrder is the order room categories are listed in, chosen so a routine
+// reads roughly like a day in the home rather than alphabetically.
+var roomOrder = []RoomKind{Bedroom, Bathroom, Kitchen, Living, Office, Hallway, Outdoor, Other}
+
+var roomLabels = map[RoomKind]string{
+	Kitchen:  "Kitchen",
+	Living:   "Living room",
+	Bedroom:  "Bedroom",
+	Bathroom: "Bathroom",
+	Office:   "Office",
+	Hallway:  "Hallway",
+	Outdoor:  "Outdoor",
+	Other:    "Other rooms",
 }
 
-// Definition is a selectable presence routine. Windows are not exposed over
-// the API; the UI only needs the human-readable metadata.
+// RoomLabel returns the display name of a room category.
+func RoomLabel(kind RoomKind) string {
+	if label, ok := roomLabels[kind]; ok {
+		return label
+	}
+	return string(kind)
+}
+
+// RoomOrderIndex returns the display rank of a room category, used to keep
+// room lanes in the same order everywhere in the UI.
+func RoomOrderIndex(kind RoomKind) int {
+	for index, room := range roomOrder {
+		if room == kind {
+			return index
+		}
+	}
+	return len(roomOrder)
+}
+
+// Window is a period during which a set of room categories is in use.
+type Window struct {
+	StartMinute     int        `json:"start_minute"` // minutes since midnight
+	DurationMinutes int        `json:"duration_minutes"`
+	Rooms           []RoomKind `json:"rooms"`
+}
+
+// Definition is a selectable presence routine.
 type Definition struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
-	Windows     []Window `json:"-"`
+	Windows     []Window `json:"windows"`
 }
 
 // ActiveWindow is one concrete occurrence of a window on a specific day.
@@ -52,6 +84,11 @@ type ActiveWindow struct {
 	Window Window
 	Start  time.Time
 	End    time.Time
+}
+
+// Contains reports whether the occurrence covers the given moment.
+func (w ActiveWindow) Contains(now time.Time) bool {
+	return !now.Before(w.Start) && now.Before(w.End)
 }
 
 var definitions = []Definition{
@@ -244,12 +281,12 @@ func Get(id string) Definition {
 // current day and the previous day are checked so windows that cross midnight
 // keep working after 00:00.
 func (d Definition) ActiveAt(now time.Time) []ActiveWindow {
-	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	midnight := startOfDay(now)
 	result := make([]ActiveWindow, 0, len(d.Windows))
 
 	for index, window := range d.Windows {
 		for dayOffset := 0; dayOffset >= -1; dayOffset-- {
-			start, end := window.occurrence(midnight.AddDate(0, 0, dayOffset), index)
+			start, end := window.occurrence(startOfDay(midnight.AddDate(0, 0, dayOffset)), index)
 			if !now.Before(start) && now.Before(end) {
 				result = append(result, ActiveWindow{
 					Index:  index,
@@ -263,6 +300,81 @@ func (d Definition) ActiveAt(now time.Time) []ActiveWindow {
 	}
 
 	return result
+}
+
+// OccurrencesOnDay returns every window occurrence overlapping the calendar
+// day that contains now, sorted by start time. The neighbouring days are
+// considered too: per-day jitter can pull a window back before midnight and
+// long windows (a late evening, outdoor lights) reach past it.
+func (d Definition) OccurrencesOnDay(now time.Time) []ActiveWindow {
+	dayStart := startOfDay(now)
+	dayEnd := startOfDay(dayStart.AddDate(0, 0, 1))
+
+	result := make([]ActiveWindow, 0, len(d.Windows))
+	for index, window := range d.Windows {
+		for dayOffset := -1; dayOffset <= 1; dayOffset++ {
+			start, end := window.occurrence(startOfDay(dayStart.AddDate(0, 0, dayOffset)), index)
+			if !end.After(dayStart) || !start.Before(dayEnd) {
+				continue
+			}
+			result = append(result, ActiveWindow{
+				Index:  index,
+				Window: window,
+				Start:  start,
+				End:    end,
+			})
+		}
+	}
+
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].Start.Before(result[j].Start)
+	})
+	return result
+}
+
+// DesiredStates reports which of the candidate lamps the given occurrences
+// want switched on. Lamps missing from the result are desired off.
+func DesiredStates(active []ActiveWindow, roomOfLight map[string]RoomKind, lightIDs []string) map[string]bool {
+	desired := make(map[string]bool)
+	if len(active) == 0 || len(lightIDs) == 0 {
+		return desired
+	}
+
+	lightsByRoom := GroupByRoom(roomOfLight, lightIDs)
+	for _, window := range active {
+		for _, room := range window.Window.Rooms {
+			ids := lightsByRoom[room]
+			if len(ids) == 0 {
+				continue
+			}
+			for id := range window.SelectLights(room, ids) {
+				desired[id] = true
+			}
+		}
+	}
+	return desired
+}
+
+// GroupByRoom buckets light IDs by room category. Lamps in a room the
+// classifier did not recognise fall back to Other, which the routines treat
+// like a living room.
+func GroupByRoom(roomOfLight map[string]RoomKind, lightIDs []string) map[RoomKind][]string {
+	grouped := make(map[RoomKind][]string)
+	for _, id := range lightIDs {
+		room, ok := roomOfLight[id]
+		if !ok {
+			room = Other
+		}
+		grouped[room] = append(grouped[room], id)
+	}
+	return grouped
+}
+
+// startOfDay returns midnight of the calendar day containing t. Going through
+// time.Date also normalises the result after date arithmetic across a DST
+// boundary, where "24 hours earlier" is not midnight.
+func startOfDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
 // occurrence resolves the window to concrete times, adding a deterministic
@@ -311,40 +423,6 @@ func (w ActiveWindow) SelectLights(room RoomKind, lightIDs []string) map[string]
 		selected[scored[i].id] = true
 	}
 	return selected
-}
-
-// ClassifyRoom maps a Hue room name to a routine category. English and German
-// names are recognised, which covers the common Hue app naming schemes.
-func ClassifyRoom(name string) RoomKind {
-	lower := strings.ToLower(strings.TrimSpace(name))
-
-	switch {
-	case containsAny(lower, "carport", "schuppen", "garten", "terrasse", "outdoor", "außen", "aussen", "balkon", "garage", "veranda", "patio", "shed", "porch"):
-		return Outdoor
-	case containsAny(lower, "küche", "kueche", "kitchen", "esszimmer", "dining", "cocina", "cuisine"):
-		return Kitchen
-	case containsAny(lower, "bad", "bath", "wc", "toilet", "dusche", "shower"):
-		return Bathroom
-	case containsAny(lower, "schlafzimmer", "bedroom", "kinderzimmer", "gästezimmer", "guest", "nursery", "kids", "child"):
-		return Bedroom
-	case containsAny(lower, "arbeitszimmer", "office", "büro", "buero", "study", "atelier", "werkstatt", "desk", "work"):
-		return Office
-	case containsAny(lower, "wohnzimmer", "living", "lounge", "salon", "stube", "lesezimmer", "reading", "bibliothek", "library", "familie", "tv"):
-		return Living
-	case containsAny(lower, "flur", "hall", "diele", "entry", "corridor", "treppe", "stairs", "vorraum"):
-		return Hallway
-	default:
-		return Other
-	}
-}
-
-func containsAny(value string, needles ...string) bool {
-	for _, needle := range needles {
-		if strings.Contains(value, needle) {
-			return true
-		}
-	}
-	return false
 }
 
 func hashUint(seed uint64, values ...uint64) uint64 {

@@ -185,6 +185,8 @@
         }
 
         main {
+            display: grid;
+            gap: 20px;
             max-width: 960px;
             margin: 0 auto;
             padding: 0 20px 60px;
@@ -218,20 +220,6 @@
         .card h2 {
             margin: 0;
             font-size: 1.2rem;
-        }
-
-        .next-event {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            margin: 8px 0 0;
-            color: var(--muted);
-            font-size: .92rem;
-        }
-
-        .next-event span {
-            color: var(--text);
-            font-weight: 600;
         }
 
         .inline-icon {
@@ -340,6 +328,310 @@
             text-align: right;
         }
 
+        /* The simulated clock, the routine's progress through the day, and the
+           lamp changes it caused: the three things that tell the user whether
+           the simulation is really running. */
+        .sim-panel {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 18px 28px;
+            margin-top: 18px;
+            padding: 16px 18px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--surface-2);
+        }
+
+        .sim-clock {
+            min-width: 0;
+        }
+
+        .sim-time {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+            margin: 0;
+            /* The clock redraws in place many times a second, so equal-width
+               digits are what keeps it from jittering. */
+            font-variant-numeric: tabular-nums;
+            font-size: clamp(2rem, 7vw, 2.6rem);
+            font-weight: 700;
+            letter-spacing: -.02em;
+            line-height: 1.05;
+        }
+
+        .sim-seconds {
+            color: var(--muted);
+            font-size: .46em;
+            font-weight: 600;
+        }
+
+        .sim-clock-meta {
+            margin: 5px 0 0;
+            color: var(--muted);
+            font-size: .82rem;
+        }
+
+        .sim-clock-meta strong {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .sim-metrics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 26px;
+            margin: 0;
+        }
+
+        .sim-metric dt {
+            margin-bottom: 1px;
+            color: var(--muted);
+            font-size: .68rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .sim-metric dd {
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 600;
+        }
+
+        .sim-metric.is-countdown dd {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sim-metric dd small {
+            color: var(--muted);
+            font-size: .72rem;
+            font-weight: 500;
+        }
+
+        .section-head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 6px 16px;
+        }
+
+        .section-head h2 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+        .active-rooms {
+            margin: 0;
+            color: var(--muted);
+            font-size: .85rem;
+        }
+
+        .active-rooms strong {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .timeline {
+            --label-width: 96px;
+            /* Where the tracks start: the label column plus the grid gap. */
+            --track-origin: calc(var(--label-width) + 10px);
+            margin-top: 16px;
+        }
+
+        .timeline-empty,
+        .activity-empty {
+            justify-content: center;
+            padding: 22px 12px;
+            border: 1px dashed var(--border);
+            border-radius: 12px;
+            color: var(--muted);
+            font-size: .85rem;
+            text-align: center;
+        }
+
+        .timeline-plot {
+            position: relative;
+            display: grid;
+            grid-template-columns: var(--label-width) minmax(0, 1fr);
+            gap: 2px 10px;
+            align-items: center;
+        }
+
+        .timeline-lane-label {
+            overflow: hidden;
+            color: var(--muted);
+            font-size: .74rem;
+            font-weight: 600;
+            text-align: right;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .timeline-lane-label.is-empty {
+            opacity: .55;
+        }
+
+        .timeline-track {
+            position: relative;
+            height: 18px;
+            border-radius: 5px;
+            background-color: var(--surface-3);
+            /* Hairline solid gridlines every six hours. */
+            background-image: linear-gradient(90deg, var(--border) 0 1px, transparent 1px);
+            background-size: 25% 100%;
+        }
+
+        .timeline-block {
+            position: absolute;
+            top: 3px;
+            bottom: 3px;
+            min-width: 3px;
+            border-radius: 4px;
+            background: var(--accent-soft);
+        }
+
+        .timeline-block.is-active {
+            top: 1px;
+            bottom: 1px;
+            background: var(--accent);
+        }
+
+        .timeline-block.is-empty {
+            background: transparent;
+            border: 1px dashed var(--border-strong);
+        }
+
+        /* Overlaid rather than placed in the grid: a grid item spanning every
+           row would claim the track column and displace the lanes. */
+        .timeline-now {
+            position: absolute;
+            top: -2px;
+            bottom: -2px;
+            left: calc(var(--track-origin) + var(--now, 0) * (100% - var(--track-origin)));
+            width: 2px;
+            margin-left: -1px;
+            border-radius: 2px;
+            background: var(--text);
+            pointer-events: none;
+        }
+
+        .timeline-axis {
+            position: relative;
+            height: 16px;
+            margin-left: var(--track-origin);
+            color: var(--muted);
+            font-size: .68rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .timeline-axis span {
+            position: absolute;
+            top: 3px;
+            transform: translateX(-50%);
+        }
+
+        .timeline-axis span:first-child {
+            transform: none;
+        }
+
+        .timeline-axis span:last-child {
+            transform: translateX(-100%);
+        }
+
+        .timeline-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 16px;
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: .74rem;
+        }
+
+        .timeline-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-swatch {
+            width: 12px;
+            height: 10px;
+            border-radius: 3px;
+            background: var(--accent-soft);
+        }
+
+        .legend-swatch.is-active {
+            background: var(--accent);
+        }
+
+        .legend-swatch.is-empty {
+            background: transparent;
+            border: 1px dashed var(--border-strong);
+        }
+
+        .legend-swatch.is-now {
+            width: 2px;
+            height: 12px;
+            border-radius: 2px;
+            background: var(--text);
+        }
+
+        .activity {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 2px;
+        }
+
+        .activity li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 10px;
+            border-radius: 10px;
+            background: var(--surface-2);
+            font-size: .85rem;
+        }
+
+        .activity-time {
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+        }
+
+        .activity-name {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            font-weight: 600;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .activity-room {
+            color: var(--muted);
+            font-size: .76rem;
+            white-space: nowrap;
+        }
+
+        /* Switched on reads accented, like a lit lamp card does. */
+        .activity .state-pill.is-on {
+            color: var(--accent-strong);
+            background: var(--accent-soft);
+        }
+
+        .activity-age {
+            color: var(--muted);
+            font-size: .74rem;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
         .lamps-header {
             display: flex;
             flex-wrap: wrap;
@@ -392,6 +684,7 @@
         .lights-groups {
             display: grid;
             gap: 24px;
+            margin-top: 16px;
         }
 
         .lamp-group-header {
@@ -569,6 +862,12 @@
             background: var(--surface-2);
         }
 
+        /* A lamp the routine wants in the other state. The simulator changes
+           one lamp per step, so this is the queue it is working through. */
+        .light-item.is-pending {
+            border-color: var(--accent);
+        }
+
         .light-item.is-excluded .lamp-visual,
         .light-item.is-excluded .light-name,
         .light-item.is-excluded .light-meta,
@@ -641,19 +940,40 @@
         }
 
         .light-name {
-            margin: 4px 0 2px;
+            margin: 4px 0 0;
             font-size: .95rem;
             font-weight: 600;
             overflow-wrap: anywhere;
         }
 
+        .light-room {
+            margin: 0 0 4px;
+            color: var(--muted);
+            font-size: .7rem;
+            font-weight: 600;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+        }
+
         .light-meta {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
             font-size: .8rem;
             color: var(--muted);
+        }
+
+        .target-pill {
+            padding: 2px 8px;
+            border: 1px solid var(--accent);
+            border-radius: 999px;
+            color: var(--accent-strong);
+            font-size: .68rem;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
         }
 
         .state-pill {
@@ -1033,13 +1353,6 @@
                 <div>
                     <p class="eyebrow">Live status</p>
                     <h2 id="status-title">Current Status</h2>
-                    <p class="next-event">
-                        <svg class="inline-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="12" r="9"></circle>
-                            <path d="M12 7v5l3 2"></path>
-                        </svg>
-                        Next simulation event: <span id="next-event">Loading...</span>
-                    </p>
                 </div>
                 <div class="status-controls">
                     <span class="status-badge" id="status-badge">Connecting...</span>
@@ -1055,8 +1368,67 @@
                 </div>
             </div>
 
+            <div class="sim-panel">
+                <div class="sim-clock">
+                    <p class="eyebrow">Simulated clock</p>
+                    <p class="sim-time" id="sim-time" aria-live="off">
+                        <span id="sim-time-hm">--:--</span><span class="sim-seconds" id="sim-time-sec">:--</span>
+                    </p>
+                    <p class="sim-clock-meta" id="sim-clock-meta">Waiting for the simulator...</p>
+                </div>
+                <dl class="sim-metrics">
+                    <div class="sim-metric is-countdown">
+                        <dt>Next step</dt>
+                        <dd id="metric-next">&mdash;</dd>
+                    </div>
+                    <div class="sim-metric">
+                        <dt>Lamps on</dt>
+                        <dd id="metric-lamps">&mdash;</dd>
+                    </div>
+                    <div class="sim-metric">
+                        <dt>Waiting to change</dt>
+                        <dd id="metric-pending">&mdash;</dd>
+                    </div>
+                    <div class="sim-metric">
+                        <dt>Checks / changes</dt>
+                        <dd id="metric-work">&mdash;</dd>
+                    </div>
+                </dl>
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="routine-title">
+            <div class="section-head">
+                <div>
+                    <p class="eyebrow">Routine</p>
+                    <h2 id="routine-title">Today in the simulated day</h2>
+                </div>
+                <p class="active-rooms" id="active-rooms">&nbsp;</p>
+            </div>
+
+            <div class="timeline" id="timeline">
+                <div class="timeline-plot" id="timeline-plot"></div>
+                <div class="timeline-axis" id="timeline-axis"></div>
+            </div>
+            <p class="timeline-legend">
+                <span><i class="legend-swatch is-active"></i>In use now</span>
+                <span><i class="legend-swatch"></i>Scheduled today</span>
+                <span><i class="legend-swatch is-empty"></i>No lamps in this room</span>
+                <span><i class="legend-swatch is-now"></i>Simulated now</span>
+            </p>
+
             <div class="lamps-header">
-                <h3 class="lamps-title">Lamps</h3>
+                <h3 class="lamps-title">Recent lamp changes</h3>
+            </div>
+            <ol class="activity" id="activity"></ol>
+        </section>
+
+        <section class="card" aria-labelledby="lamps-title">
+            <div class="section-head">
+                <div>
+                    <p class="eyebrow">Hardware</p>
+                    <h2 id="lamps-title">Lamps</h2>
+                </div>
                 <div id="group-switch" class="group-switch" role="group" aria-label="Group lamps by" hidden>
                     <button type="button" data-group-mode="rooms">Rooms</button>
                     <button type="button" data-group-mode="zones">Zones</button>
@@ -1369,6 +1741,281 @@
             }
         }
 
+        // The server reports simulated time as minutes since simulated
+        // midnight plus a speed factor, so the clock can be animated here
+        // without parsing a date from a day that may be nowhere near today.
+        const timeline = document.getElementById("timeline");
+        const timelinePlot = document.getElementById("timeline-plot");
+        const timelineAxis = document.getElementById("timeline-axis");
+        const activityList = document.getElementById("activity");
+        const activeRooms = document.getElementById("active-rooms");
+        const simTimeHM = document.getElementById("sim-time-hm");
+        const simTimeSec = document.getElementById("sim-time-sec");
+        const simClockMeta = document.getElementById("sim-clock-meta");
+        const metricNext = document.getElementById("metric-next");
+        const metricLamps = document.getElementById("metric-lamps");
+        const metricPending = document.getElementById("metric-pending");
+        const metricWork = document.getElementById("metric-work");
+
+        const MINUTES_PER_DAY = 1440;
+        let simClock = null;
+        let lastTimelineSignature = null;
+        let pollDelay = 3000;
+
+        function pad2(value) {
+            return String(Math.floor(value)).padStart(2, "0");
+        }
+
+        function wrapMinute(minute) {
+            return ((minute % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+        }
+
+        function formatMinuteOfDay(minute) {
+            const wrapped = wrapMinute(minute);
+            return pad2(wrapped / 60) + ":" + pad2(wrapped % 60);
+        }
+
+        function formatCountdown(seconds) {
+            if (seconds <= 0.05) {
+                return "due now";
+            }
+            if (seconds < 10) {
+                return seconds.toFixed(1) + " s";
+            }
+            if (seconds < 90) {
+                return Math.round(seconds) + " s";
+            }
+            return Math.round(seconds / 60) + " min";
+        }
+
+        function formatAge(seconds) {
+            if (seconds < 2) {
+                return "just now";
+            }
+            if (seconds < 90) {
+                return Math.round(seconds) + " s ago";
+            }
+            if (seconds < 5400) {
+                return Math.round(seconds / 60) + " min ago";
+            }
+            return Math.round(seconds / 3600) + " h ago";
+        }
+
+        function describeRate(speed) {
+            return speed === 1 ? "tracking real time" : speed + "× faster than real time";
+        }
+
+        // Called on a short interval so the clock, the countdown and the
+        // timeline marker stay smooth between polls.
+        function tickSimClock() {
+            if (!simClock) {
+                return;
+            }
+
+            const elapsed = (performance.now() - simClock.at) / 1000;
+            const minute = simClock.minute + (elapsed * simClock.speed) / 60;
+            const wrapped = wrapMinute(minute);
+
+            simTimeHM.textContent = formatMinuteOfDay(minute);
+            simTimeSec.textContent = ":" + pad2((wrapped * 60) % 60);
+            timeline.style.setProperty("--now", wrapped / MINUTES_PER_DAY);
+
+            metricNext.textContent = formatCountdown(Math.max(0, simClock.nextEventIn - elapsed));
+            const due = document.createElement("small");
+            due.textContent = " ≈ " + formatMinuteOfDay(simClock.nextEventMinute);
+            metricNext.appendChild(due);
+        }
+
+        function clearSimClock(message) {
+            simClock = null;
+            simTimeHM.textContent = "--:--";
+            simTimeSec.textContent = ":--";
+            simClockMeta.textContent = message;
+            timeline.style.setProperty("--now", 0);
+            [metricNext, metricLamps, metricPending, metricWork].forEach(function (element) {
+                element.textContent = "—";
+            });
+        }
+
+        function renderSimulation(data) {
+            const sim = data.simulation;
+            if (!data.configured || !sim || !sim.running) {
+                clearSimClock(data.configured
+                    ? "The simulator is not running yet."
+                    : "Pair a bridge to start the simulation.");
+                lastTimelineSignature = null;
+                renderTimeline(null);
+                renderActivity(null);
+                activeRooms.textContent = "";
+                return;
+            }
+
+            const speed = Number(sim.speed) || 1;
+            pollDelay = speed > 4 ? 1000 : 3000;
+
+            simClock = {
+                at: performance.now(),
+                minute: Number(sim.simulated_minute) || 0,
+                speed: speed,
+                nextEventIn: Number(sim.next_event_in) || 0,
+                nextEventMinute: Number(sim.next_event_minute) || 0
+            };
+
+            const day = document.createElement("strong");
+            day.textContent = sim.simulated_day_label || "";
+            simClockMeta.textContent = "";
+            simClockMeta.append(
+                day,
+                document.createTextNode(" · " + describeRate(speed) +
+                    (sim.clock_offset ? " · " + sim.clock_offset : ""))
+            );
+
+            metricLamps.textContent = sim.lamps_on + " of " + sim.lamps_simulated;
+            metricPending.textContent = sim.pending_lamps === 0
+                ? "nothing"
+                : sim.pending_lamps + (sim.pending_lamps === 1 ? " lamp" : " lamps");
+            metricWork.textContent = sim.steps + " / " + sim.changes;
+
+            tickSimClock();
+            renderTimeline(sim);
+            renderActivity(sim);
+
+            const rooms = Array.isArray(sim.active_rooms) ? sim.active_rooms : [];
+            activeRooms.textContent = "";
+            if (rooms.length === 0) {
+                activeRooms.textContent = "Nobody home right now — all simulated lamps off.";
+            } else {
+                const label = document.createElement("strong");
+                label.textContent = rooms.join(", ");
+                activeRooms.append(document.createTextNode("In use now: "), label);
+            }
+        }
+
+        function renderTimeline(sim) {
+            const blocks = Array.isArray(sim && sim.timeline) ? sim.timeline : [];
+
+            const signature = JSON.stringify(blocks);
+            if (signature === lastTimelineSignature) {
+                return;
+            }
+            lastTimelineSignature = signature;
+
+            timelinePlot.innerHTML = "";
+            timelineAxis.innerHTML = "";
+
+            if (blocks.length === 0) {
+                const empty = document.createElement("p");
+                empty.className = "timeline-empty";
+                empty.textContent = sim
+                    ? "This routine has no windows."
+                    : "The routine appears once the simulator is running.";
+                timelinePlot.appendChild(empty);
+                return;
+            }
+
+            // One lane per room category, in the order the server sent them.
+            const lanes = [];
+            const laneByKind = new Map();
+            blocks.forEach(function (block) {
+                let lane = laneByKind.get(block.room_kind);
+                if (!lane) {
+                    lane = { label: block.room_label, hasLights: block.has_lights, blocks: [] };
+                    laneByKind.set(block.room_kind, lane);
+                    lanes.push(lane);
+                }
+                lane.blocks.push(block);
+            });
+
+            timelinePlot.style.gridTemplateRows = "repeat(" + lanes.length + ", 18px)";
+
+            lanes.forEach(function (lane) {
+                const label = document.createElement("span");
+                label.className = "timeline-lane-label" + (lane.hasLights ? "" : " is-empty");
+                label.textContent = lane.label;
+                label.title = lane.hasLights
+                    ? lane.label
+                    : lane.label + " — no lamp of yours is in a room like this, so this part of the routine cannot show";
+
+                const track = document.createElement("div");
+                track.className = "timeline-track";
+
+                lane.blocks.forEach(function (block) {
+                    const left = (block.start_minute / MINUTES_PER_DAY) * 100;
+                    const width = ((block.end_minute - block.start_minute) / MINUTES_PER_DAY) * 100;
+
+                    const element = document.createElement("div");
+                    element.className = "timeline-block" +
+                        (block.active ? " is-active" : "") +
+                        (block.has_lights ? "" : " is-empty");
+                    // A 1px inset on each side leaves a 2px gap where windows
+                    // in the same room meet.
+                    element.style.left = "calc(" + left.toFixed(3) + "% + 1px)";
+                    element.style.width = "calc(" + width.toFixed(3) + "% - 2px)";
+                    element.title = lane.label + " · " + block.start_label + "–" + block.end_label +
+                        (block.active ? " · in use now" : "") +
+                        (block.has_lights ? "" : " · no lamps in this room");
+                    track.appendChild(element);
+                });
+
+                timelinePlot.append(label, track);
+            });
+
+            const marker = document.createElement("div");
+            marker.className = "timeline-now";
+            timelinePlot.appendChild(marker);
+
+            ["00:00", "06:00", "12:00", "18:00", "24:00"].forEach(function (label, index) {
+                const tick = document.createElement("span");
+                tick.style.left = (index * 25) + "%";
+                tick.textContent = label;
+                timelineAxis.appendChild(tick);
+            });
+        }
+
+        function renderActivity(sim) {
+            const entries = Array.isArray(sim && sim.activity) ? sim.activity : [];
+            activityList.innerHTML = "";
+
+            if (entries.length === 0) {
+                const empty = document.createElement("li");
+                empty.className = "activity-empty";
+                empty.textContent = sim
+                    ? "No lamp changes yet. The simulator switches one lamp per step."
+                    : "Lamp changes appear here once the simulator is running.";
+                activityList.appendChild(empty);
+                return;
+            }
+
+            entries.forEach(function (entry) {
+                const item = document.createElement("li");
+
+                const time = document.createElement("span");
+                time.className = "activity-time";
+                time.textContent = entry.simulated_at;
+
+                const name = document.createElement("span");
+                name.className = "activity-name";
+                name.textContent = entry.light_name || "Lamp";
+
+                const room = document.createElement("span");
+                room.className = "activity-room";
+                room.textContent = entry.room_label || "";
+
+                const state = document.createElement("span");
+                state.className = "state-pill" + (entry.on ? " is-on" : "");
+                state.textContent = entry.on ? "On" : "Off";
+
+                const age = document.createElement("span");
+                age.className = "activity-age";
+                age.textContent = formatAge(Number(entry.age_seconds) || 0);
+
+                item.append(time, name, room, state, age);
+                activityList.appendChild(item);
+            });
+        }
+
+        setInterval(tickSimClock, 100);
+
         function setGroupMode(mode, persist) {
             groupMode = mode === "zones" ? "zones" : "rooms";
             groupButtons.forEach(function (button) {
@@ -1419,25 +2066,37 @@
         function createLightCard(light) {
             const isOn = Boolean(light.state && light.state.on);
             const inSimulation = light.in_simulation !== false;
+            const pending = Boolean(light.pending);
             const bri = Math.max(0, Math.min(100, Number(light.state && light.state.bri) || 0));
             const percent = Math.round(bri);
             const name = light.name || ("Light " + light.id);
 
             const card = document.createElement("article");
-            card.className = "light-item " + (isOn ? "is-on" : "is-off") + (inSimulation ? "" : " is-excluded");
+            card.className = "light-item " + (isOn ? "is-on" : "is-off") +
+                (inSimulation ? "" : " is-excluded") +
+                (pending ? " is-pending" : "");
             card.innerHTML = `
                 <div class="lamp-visual">${LAMP_ICON}</div>
                 <h3 class="light-name"></h3>
+                <p class="light-room"></p>
                 <div class="light-meta">
                     <span class="state-pill">${isOn ? "On" : "Off"}</span>
                     <span class="brightness">${isOn ? percent + "%" : "&mdash;"}</span>
                     ${inSimulation ? "" : '<span class="sim-pill">Paused</span>'}
+                    ${pending ? '<span class="target-pill"></span>' : ""}
                 </div>
                 <div class="brightness-track" aria-hidden="true">
                     <div class="brightness-fill" style="width:${isOn ? percent : 0}%"></div>
                 </div>
             `;
             card.querySelector(".light-name").textContent = name;
+            // The routine decides per room category, so showing how this lamp
+            // was classified explains why it is (or is not) being used.
+            card.querySelector(".light-room").textContent = light.room_label || "";
+            if (pending) {
+                card.querySelector(".target-pill").textContent =
+                    "Routine wants " + (light.desired_on ? "on" : "off");
+            }
 
             const simulationToggle = createSwitch(
                 inSimulation,
@@ -1454,7 +2113,8 @@
             card.setAttribute(
                 "aria-label",
                 name + " is " + (isOn ? "on at " + percent + " percent brightness" : "off") +
-                (inSimulation ? "" : ", excluded from the simulation")
+                (inSimulation ? "" : ", excluded from the simulation") +
+                (pending ? ", the routine wants it " + (light.desired_on ? "on" : "off") : "")
             );
             return card;
         }
@@ -1586,11 +2246,9 @@
                     throw new Error(await response.text());
                 }
                 const data = await response.json();
-                document.getElementById("next-event").textContent = data.next_event
-                    ? new Date(data.next_event).toLocaleString()
-                    : "Not scheduled";
                 syncSpeedControls(data);
                 syncScheduleControls(data);
+                renderSimulation(data);
 
                 if (!data.configured) {
                     lastStatusSignature = null;
@@ -1760,9 +2418,23 @@
             }
         }
 
-        setInterval(updateStatus, 3000);
+        // Polling speeds up while the simulation is fast-forwarding, because
+        // lamps then change several times a minute. The server caches the
+        // bridge reads behind /api/status so this cannot flood the bridge.
+        let pollTimer = null;
+
+        function scheduleNextPoll() {
+            clearTimeout(pollTimer);
+            pollTimer = setTimeout(async function () {
+                await updateStatus();
+                scheduleNextPoll();
+            }, pollDelay);
+        }
+
         loadConfig();
-        loadSchedules().then(updateStatus);
+        loadSchedules()
+            .then(updateStatus)
+            .then(scheduleNextPoll);
     </script>
 </body>
 </html>
