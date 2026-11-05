@@ -1324,8 +1324,8 @@
         function createLightCard(light) {
             const isOn = Boolean(light.state && light.state.on);
             const inSimulation = light.in_simulation !== false;
-            const bri = Math.max(0, Math.min(254, Number(light.state && light.state.bri) || 0));
-            const percent = Math.round((bri / 254) * 100);
+            const bri = Math.max(0, Math.min(100, Number(light.state && light.state.bri) || 0));
+            const percent = Math.round(bri);
             const name = light.name || ("Light " + light.id);
 
             const card = document.createElement("article");

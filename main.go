@@ -545,7 +545,14 @@ func buildLightGroups(ctx context.Context, home *openhue.Home, simulationLights 
 func toLightResponse(id string, light openhue.LightGet, simulationLights map[string]bool) lightResponse {
 	bri := 0
 	if light.Dimming != nil && light.Dimming.Brightness != nil {
+		// Hue's v2 API reports brightness as a percentage (0-100).
 		bri = int(*light.Dimming.Brightness)
+		if bri < 0 {
+			bri = 0
+		}
+		if bri > 100 {
+			bri = 100
+		}
 	}
 
 	return lightResponse{

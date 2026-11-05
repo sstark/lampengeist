@@ -2,11 +2,13 @@ package presence
 
 import (
 	"context"
+	"errors"
 	"github.com/openhue/openhue-go"
 	"lampengeist/internal/config"
 	"lampengeist/internal/storage"
 	"log"
 	"math/rand"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -189,10 +191,31 @@ func (s *Simulator) step(ctx context.Context) {
 	}
 
 	log.Printf("Toggling light %s to %v", lightKey, isOn)
-	if err := currentClient.UpdateLight(ctx, lightKey, openhue.LightPut{
-		On:      &openhue.On{On: isOn},
-		Dimming: &openhue.Dimming{Brightness: 254},
-	}); err != nil {
+
+	update := openhue.LightPut{
+		On: &openhue.On{On: isOn},
+	}
+	// Only dimmable lights accept a brightness value, and only bother when
+	// switching a lamp on. Hue's v2 API expresses brightness as a percentage
+	// (0-100), not the 0-254 range used by v1.
+	if isOn && light.Dimming != nil {
+		update.Dimming = &openhue.Dimming{Brightness: 100}
+	}
+
+	if err := currentClient.UpdateLight(ctx, lightKey, update); err != nil {
+		// 207 Multi-Status means the bridge accepted the request but could not
+		// reach the device (for example a bulb in standby). The command is
+		// retried on a later run, so this is not an application error.
+		if isTransientUpdateError(err) {
+			return
+		}
 		log.Printf("Error updating light %s: %v", lightKey, err)
 	}
+}
+
+// isTransientUpdateError reports whether the bridge accepted a command but
+// could not deliver it to the device. Those updates are retried later.
+func isTransientUpdateError(err error) bool {
+	var apiErr *openhue.ApiError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusMultiStatus
 }
