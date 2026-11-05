@@ -12,17 +12,21 @@ import (
 )
 
 type Simulator struct {
-	client    *openhue.Home
-	store     *storage.Store
-	mu        sync.RWMutex
-	NextEvent time.Time
+	client       *openhue.Home
+	store        *storage.Store
+	mu           sync.RWMutex
+	NextEvent    time.Time
+	speed        int
+	speedChanged chan struct{}
 }
 
-func NewSimulator(client *openhue.Home, store *storage.Store) *Simulator {
+func NewSimulator(client *openhue.Home, store *storage.Store, speed int) *Simulator {
 	return &Simulator{
-		client:    client,
-		store:     store,
-		NextEvent: time.Now().Add(1 * time.Minute),
+		client:       client,
+		store:        store,
+		NextEvent:    time.Now().Add(1 * time.Minute),
+		speed:        config.ClampSimulationSpeed(speed),
+		speedChanged: make(chan struct{}, 1),
 	}
 }
 
@@ -38,23 +42,96 @@ func (s *Simulator) GetNextEvent() time.Time {
 	return s.NextEvent
 }
 
+func (s *Simulator) GetSpeed() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.speed
+}
+
+// SetSpeed changes the simulation speed factor (1x to 1440x). The running
+// loop is notified so it can reschedule the current wait immediately.
+func (s *Simulator) SetSpeed(speed int) {
+	speed = config.ClampSimulationSpeed(speed)
+
+	s.mu.Lock()
+	changed := s.speed != speed
+	s.speed = speed
+	s.mu.Unlock()
+
+	if changed {
+		select {
+		case s.speedChanged <- struct{}{}:
+		default:
+		}
+	}
+}
+
 func (s *Simulator) Run(ctx context.Context) {
 	for {
-		// Schedule the next event first so GetNextEvent always reports the
-		// actual time the simulator will act.
-		delay := time.Duration(rand.Intn(4)+1) * time.Minute
+		remainingSimulated := time.Duration(rand.Intn(4)+1) * time.Minute
+
 		s.mu.Lock()
-		s.NextEvent = time.Now().Add(delay)
+		speed := s.speed
+		realDelay := scaledDelay(remainingSimulated, speed)
+		s.NextEvent = time.Now().Add(realDelay)
 		s.mu.Unlock()
 
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(delay):
+		// Wait for the scaled delay, but react immediately when the user
+		// changes the speed while the timer is running.
+		timer := time.NewTimer(realDelay)
+		waitStarted := time.Now()
+		waiting := true
+
+		for waiting {
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+
+			case <-s.speedChanged:
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+
+				now := time.Now()
+				elapsedSimulated := time.Duration(float64(now.Sub(waitStarted)) * float64(speed))
+				if elapsedSimulated > remainingSimulated {
+					elapsedSimulated = remainingSimulated
+				}
+				remainingSimulated -= elapsedSimulated
+
+				s.mu.Lock()
+				speed = s.speed
+				realDelay = scaledDelay(remainingSimulated, speed)
+				s.NextEvent = now.Add(realDelay)
+				s.mu.Unlock()
+
+				waitStarted = now
+				timer.Reset(realDelay)
+
+			case <-timer.C:
+				waiting = false
+			}
 		}
 
 		s.step(ctx)
 	}
+}
+
+// scaledDelay converts a simulated duration into real time. A small floor
+// prevents flooding the Hue bridge at the highest speed factors.
+func scaledDelay(simulated time.Duration, speed int) time.Duration {
+	speed = config.ClampSimulationSpeed(speed)
+	realDelay := time.Duration(float64(simulated) / float64(speed))
+
+	const minRealDelay = 100 * time.Millisecond
+	if realDelay < minRealDelay {
+		return minRealDelay
+	}
+	return realDelay
 }
 
 func (s *Simulator) step(ctx context.Context) {

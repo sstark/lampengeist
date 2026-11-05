@@ -66,7 +66,7 @@ func main() {
 		log.Printf("Hue bridge not configured yet: %v", err)
 	} else {
 		client = home
-		sim = presence.NewSimulator(client, store)
+		sim = presence.NewSimulator(client, store, cfg.SimulationSpeed)
 		go sim.Run(ctx)
 	}
 
@@ -305,11 +305,69 @@ func main() {
 		})
 	})
 
+	mux.HandleFunc("/api/speed", func(w http.ResponseWriter, r *http.Request) {
+		type speedResponse struct {
+			Speed int `json:"simulation_speed"`
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			stateMu.Lock()
+			currentSim := sim
+			speed := config.ClampSimulationSpeed(cfg.SimulationSpeed)
+			stateMu.Unlock()
+
+			if currentSim != nil {
+				speed = currentSim.GetSpeed()
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(speedResponse{Speed: speed})
+
+		case http.MethodPost:
+			var request struct {
+				Speed int `json:"speed"`
+			}
+
+			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+			if err := decoder.Decode(&request); err != nil {
+				http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			speed := config.ClampSimulationSpeed(request.Speed)
+
+			stateMu.Lock()
+			newCfg := cfg
+			newCfg.SimulationSpeed = speed
+			if err := store.Save(newCfg); err != nil {
+				stateMu.Unlock()
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			cfg = newCfg
+			currentSim := sim
+			stateMu.Unlock()
+
+			if currentSim != nil {
+				currentSim.SetSpeed(speed)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(speedResponse{Speed: speed})
+
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		stateMu.Lock()
 		currentClient := client
 		currentSim := sim
 		simulationLights := copySimulationLights(cfg.SimulationLights)
+		simulationSpeed := config.ClampSimulationSpeed(cfg.SimulationSpeed)
 		stateMu.Unlock()
 
 		lights := []lightResponse{}
@@ -329,20 +387,23 @@ func main() {
 		if currentSim != nil {
 			t := currentSim.GetNextEvent()
 			nextEvent = &t
+			simulationSpeed = currentSim.GetSpeed()
 		}
 
 		status := struct {
-			Lights     []lightResponse `json:"lights"`
-			Rooms      []lightGroup    `json:"rooms"`
-			Zones      []lightGroup    `json:"zones"`
-			NextEvent  *time.Time      `json:"next_event"`
-			Configured bool            `json:"configured"`
+			Lights          []lightResponse `json:"lights"`
+			Rooms           []lightGroup    `json:"rooms"`
+			Zones           []lightGroup    `json:"zones"`
+			NextEvent       *time.Time      `json:"next_event"`
+			Configured      bool            `json:"configured"`
+			SimulationSpeed int             `json:"simulation_speed"`
 		}{
-			Lights:     lights,
-			Rooms:      rooms,
-			Zones:      zones,
-			NextEvent:  nextEvent,
-			Configured: currentClient != nil,
+			Lights:          lights,
+			Rooms:           rooms,
+			Zones:           zones,
+			NextEvent:       nextEvent,
+			Configured:      currentClient != nil,
+			SimulationSpeed: simulationSpeed,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -590,7 +651,7 @@ func connectBridge(c config.Config) error {
 
 	client = home
 	if sim == nil {
-		sim = presence.NewSimulator(home, store)
+		sim = presence.NewSimulator(home, store, c.SimulationSpeed)
 		go sim.Run(appCtx)
 	} else {
 		sim.UpdateClient(home)

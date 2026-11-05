@@ -10,6 +10,23 @@ type Config struct {
 	Token            string          `json:"token"`
 	Enabled          bool            `json:"enabled"`
 	SimulationLights map[string]bool `json:"simulation_lights,omitempty"`
+	SimulationSpeed  int             `json:"simulation_speed,omitempty"`
+}
+
+const (
+	MinSimulationSpeed = 1
+	MaxSimulationSpeed = 1440
+)
+
+// ClampSimulationSpeed keeps a speed factor in the supported 1x-1440x range.
+func ClampSimulationSpeed(speed int) int {
+	if speed < MinSimulationSpeed {
+		return MinSimulationSpeed
+	}
+	if speed > MaxSimulationSpeed {
+		return MaxSimulationSpeed
+	}
+	return speed
 }
 
 // IsLightInSimulation reports whether a light takes part in the simulation.
@@ -20,7 +37,7 @@ func IsLightInSimulation(settings map[string]bool, lightID string) bool {
 }
 
 func LoadConfig() Config {
-	cfg := Config{Enabled: true}
+	cfg := Config{Enabled: true, SimulationSpeed: MinSimulationSpeed}
 
 	file, err := os.ReadFile("config.json")
 	if err != nil {
@@ -28,8 +45,10 @@ func LoadConfig() Config {
 	}
 
 	if err := json.Unmarshal(file, &cfg); err != nil {
-		return Config{Enabled: true}
+		return Config{Enabled: true, SimulationSpeed: MinSimulationSpeed}
 	}
+
+	cfg.SimulationSpeed = ClampSimulationSpeed(cfg.SimulationSpeed)
 
 	return cfg
 }
