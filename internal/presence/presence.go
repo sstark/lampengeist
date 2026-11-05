@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/openhue/openhue-go"
 	"lampengeist/internal/config"
+	"lampengeist/internal/schedules"
 	"lampengeist/internal/storage"
 	"log"
 	"math/rand"
@@ -13,6 +14,11 @@ import (
 	"time"
 )
 
+// roomCacheTTL bounds how long a room-to-light classification is reused
+// before being re-fetched. Room layouts rarely change, and re-fetching on
+// every step would hammer the bridge at high simulation speeds.
+const roomCacheTTL = 30 * time.Second
+
 type Simulator struct {
 	client       *openhue.Home
 	store        *storage.Store
@@ -20,6 +26,15 @@ type Simulator struct {
 	NextEvent    time.Time
 	speed        int
 	speedChanged chan struct{}
+
+	// roomCache and roomCacheAt are only touched from the single goroutine
+	// running Run/step, so they need no locking of their own.
+	roomCache   map[string]schedules.RoomKind
+	roomCacheAt time.Time
+
+	// now is overridden in tests so schedule evaluation does not depend on
+	// the wall clock at the moment the test happens to run.
+	now func() time.Time
 }
 
 func NewSimulator(client *openhue.Home, store *storage.Store, speed int) *Simulator {
@@ -29,6 +44,7 @@ func NewSimulator(client *openhue.Home, store *storage.Store, speed int) *Simula
 		NextEvent:    time.Now().Add(1 * time.Minute),
 		speed:        config.ClampSimulationSpeed(speed),
 		speedChanged: make(chan struct{}, 1),
+		now:          time.Now,
 	}
 }
 
@@ -159,12 +175,14 @@ func (s *Simulator) step(ctx context.Context) {
 	// Lamp settings are persisted in config.json. Reload them before each
 	// step so toggles made in the UI take effect without a restart.
 	simulationLights := map[string]bool{}
+	scheduleID := schedules.DefaultID
 	if s.store != nil {
 		storedConfig, err := s.store.Load()
 		if err != nil {
 			log.Printf("Simulator: error loading config: %v", err)
 		} else {
 			simulationLights = storedConfig.SimulationLights
+			scheduleID = storedConfig.SimulationSchedule
 		}
 	}
 
@@ -181,11 +199,12 @@ func (s *Simulator) step(ctx context.Context) {
 		return
 	}
 
+	desiredOn := s.desiredLightStates(ctx, currentClient, keys, scheduleID)
+
 	lightKey := keys[rand.Intn(len(keys))]
 	light := lights[lightKey]
 
-	// Semi-random logic: 70% chance the light should be on.
-	isOn := rand.Float32() < 0.7
+	isOn := desiredOn[lightKey]
 	if light.IsOn() == isOn {
 		return
 	}
@@ -218,4 +237,100 @@ func (s *Simulator) step(ctx context.Context) {
 func isTransientUpdateError(err error) bool {
 	var apiErr *openhue.ApiError
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusMultiStatus
+}
+
+// desiredLightStates returns, for each candidate light, whether the active
+// schedule wants it on right now. Lights whose room has no active window are
+// absent from the result (and therefore desired off).
+func (s *Simulator) desiredLightStates(ctx context.Context, client *openhue.Home, lightIDs []string, scheduleID string) map[string]bool {
+	active := schedules.Get(scheduleID).ActiveAt(s.now())
+	if len(active) == 0 {
+		return map[string]bool{}
+	}
+
+	roomOfLight := s.roomClassification(ctx, client)
+
+	lightsByRoom := make(map[schedules.RoomKind][]string)
+	for _, id := range lightIDs {
+		room, ok := roomOfLight[id]
+		if !ok {
+			room = schedules.Other
+		}
+		lightsByRoom[room] = append(lightsByRoom[room], id)
+	}
+
+	desired := make(map[string]bool)
+	for _, window := range active {
+		for _, room := range window.Window.Rooms {
+			ids := lightsByRoom[room]
+			if len(ids) == 0 {
+				continue
+			}
+			for id := range window.SelectLights(room, ids) {
+				desired[id] = true
+			}
+		}
+	}
+	return desired
+}
+
+// roomClassification returns the cached room-kind lookup, refreshing it from
+// the bridge when stale. A failed refresh keeps serving the previous cache
+// (or nil on the very first failure) rather than aborting the step.
+func (s *Simulator) roomClassification(ctx context.Context, client *openhue.Home) map[string]schedules.RoomKind {
+	if s.roomCache != nil && time.Since(s.roomCacheAt) < roomCacheTTL {
+		return s.roomCache
+	}
+
+	classified, err := classifyLightsByRoom(ctx, client)
+	if err != nil {
+		log.Printf("Simulator: error classifying rooms: %v", err)
+		return s.roomCache
+	}
+
+	s.roomCache = classified
+	s.roomCacheAt = time.Now()
+	return s.roomCache
+}
+
+// classifyLightsByRoom maps every light ID to the room category of the Hue
+// room it belongs to. Rooms reference devices rather than lights directly, so
+// each room's devices are first resolved to the light services they expose.
+func classifyLightsByRoom(ctx context.Context, client *openhue.Home) (map[string]schedules.RoomKind, error) {
+	rooms, err := client.GetRooms(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	devices, err := client.GetDevices(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	deviceLights := make(map[string][]string, len(devices))
+	for deviceID, device := range devices {
+		for _, service := range device.Services {
+			if service.Rtype == openhue.ResourceIdentifierRtypeLight {
+				deviceLights[deviceID] = append(deviceLights[deviceID], service.Rid)
+			}
+		}
+	}
+
+	roomOfLight := make(map[string]schedules.RoomKind)
+	for _, room := range rooms {
+		kind := schedules.ClassifyRoom(room.Metadata.Name)
+		for _, child := range room.Children {
+			var lightIDs []string
+			switch child.Rtype {
+			case openhue.ResourceIdentifierRtypeDevice:
+				lightIDs = deviceLights[child.Rid]
+			case openhue.ResourceIdentifierRtypeLight:
+				lightIDs = []string{child.Rid}
+			}
+			for _, id := range lightIDs {
+				roomOfLight[id] = kind
+			}
+		}
+	}
+	return roomOfLight, nil
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/openhue/openhue-go"
 	"lampengeist/internal/config"
 	"lampengeist/internal/presence"
+	"lampengeist/internal/schedules"
 	"lampengeist/internal/storage"
 )
 
@@ -362,12 +363,73 @@ func main() {
 		}
 	})
 
+	mux.HandleFunc("/api/schedules", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(schedules.All())
+	})
+
+	mux.HandleFunc("/api/schedule", func(w http.ResponseWriter, r *http.Request) {
+		type scheduleResponse struct {
+			Schedule string `json:"schedule"`
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			stateMu.Lock()
+			current := schedules.Normalize(cfg.SimulationSchedule)
+			stateMu.Unlock()
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(scheduleResponse{Schedule: current})
+
+		case http.MethodPost:
+			var request struct {
+				Schedule string `json:"schedule"`
+			}
+
+			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+			if err := decoder.Decode(&request); err != nil {
+				http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			if !schedules.Exists(request.Schedule) {
+				http.Error(w, "unknown schedule id", http.StatusBadRequest)
+				return
+			}
+
+			stateMu.Lock()
+			newCfg := cfg
+			newCfg.SimulationSchedule = request.Schedule
+			if err := store.Save(newCfg); err != nil {
+				stateMu.Unlock()
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			cfg = newCfg
+			stateMu.Unlock()
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(scheduleResponse{Schedule: request.Schedule})
+
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		stateMu.Lock()
 		currentClient := client
 		currentSim := sim
 		simulationLights := copySimulationLights(cfg.SimulationLights)
 		simulationSpeed := config.ClampSimulationSpeed(cfg.SimulationSpeed)
+		simulationSchedule := schedules.Normalize(cfg.SimulationSchedule)
 		stateMu.Unlock()
 
 		lights := []lightResponse{}
@@ -391,19 +453,21 @@ func main() {
 		}
 
 		status := struct {
-			Lights          []lightResponse `json:"lights"`
-			Rooms           []lightGroup    `json:"rooms"`
-			Zones           []lightGroup    `json:"zones"`
-			NextEvent       *time.Time      `json:"next_event"`
-			Configured      bool            `json:"configured"`
-			SimulationSpeed int             `json:"simulation_speed"`
+			Lights             []lightResponse `json:"lights"`
+			Rooms              []lightGroup    `json:"rooms"`
+			Zones              []lightGroup    `json:"zones"`
+			NextEvent          *time.Time      `json:"next_event"`
+			Configured         bool            `json:"configured"`
+			SimulationSpeed    int             `json:"simulation_speed"`
+			SimulationSchedule string          `json:"simulation_schedule"`
 		}{
-			Lights:          lights,
-			Rooms:           rooms,
-			Zones:           zones,
-			NextEvent:       nextEvent,
-			Configured:      currentClient != nil,
-			SimulationSpeed: simulationSpeed,
+			Lights:             lights,
+			Rooms:              rooms,
+			Zones:              zones,
+			NextEvent:          nextEvent,
+			Configured:         currentClient != nil,
+			SimulationSpeed:    simulationSpeed,
+			SimulationSchedule: simulationSchedule,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

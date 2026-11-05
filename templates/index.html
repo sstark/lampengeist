@@ -280,7 +280,8 @@
             gap: 10px;
         }
 
-        .speed-control {
+        .speed-control,
+        .schedule-control {
             display: inline-flex;
             align-items: center;
             gap: 8px;
@@ -295,8 +296,23 @@
             transition: opacity .2s ease;
         }
 
-        .speed-control.is-disabled {
+        .speed-control.is-disabled,
+        .schedule-control.is-disabled {
             opacity: .5;
+        }
+
+        .schedule-select {
+            border: none;
+            background: none;
+            color: var(--text);
+            font-size: .75rem;
+            font-weight: 600;
+            max-width: 150px;
+            cursor: pointer;
+        }
+
+        .schedule-select:disabled {
+            cursor: not-allowed;
         }
 
         .speed-label {
@@ -1027,6 +1043,10 @@
                 </div>
                 <div class="status-controls">
                     <span class="status-badge" id="status-badge">Connecting...</span>
+                    <label class="schedule-control" for="schedule-select" title="Presence simulation routine">
+                        <span class="speed-label">Routine</span>
+                        <select id="schedule-select" class="schedule-select" aria-label="Presence simulation routine"></select>
+                    </label>
                     <label class="speed-control" for="speed-slider" title="Simulation speed (1x real time to 1440x)">
                         <span class="speed-label">Speed</span>
                         <input type="range" id="speed-slider" class="speed-slider" min="0" max="1000" step="1" value="0" aria-label="Simulation speed">
@@ -1274,6 +1294,81 @@
             }
         }
 
+        const scheduleSelect = document.getElementById("schedule-select");
+        const scheduleControl = document.querySelector(".schedule-control");
+        let scheduleInitialized = false;
+        let scheduleRequestSerial = 0;
+        let scheduleDescriptions = {};
+
+        async function loadSchedules() {
+            try {
+                const response = await fetch("/api/schedules");
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+                const schedulesList = await response.json();
+                scheduleSelect.innerHTML = "";
+                schedulesList.forEach(function (schedule) {
+                    scheduleDescriptions[schedule.id] = schedule.description;
+                    const option = document.createElement("option");
+                    option.value = schedule.id;
+                    option.textContent = schedule.name;
+                    option.title = schedule.description;
+                    scheduleSelect.appendChild(option);
+                });
+            } catch (err) {
+                console.error("Error loading schedules:", err);
+            }
+        }
+
+        function showSchedule(scheduleID) {
+            scheduleSelect.value = scheduleID;
+            const description = scheduleDescriptions[scheduleID];
+            scheduleControl.title = description || "Presence simulation routine";
+        }
+
+        function syncScheduleControls(data) {
+            const configured = Boolean(data.configured);
+            scheduleSelect.disabled = !configured;
+            scheduleControl.classList.toggle("is-disabled", !configured);
+
+            if (!scheduleInitialized && typeof data.simulation_schedule === "string" && data.simulation_schedule) {
+                showSchedule(data.simulation_schedule);
+                scheduleInitialized = true;
+            }
+        }
+
+        scheduleSelect.addEventListener("change", function () {
+            saveSchedule(scheduleSelect.value);
+        });
+
+        async function saveSchedule(scheduleID) {
+            const serial = ++scheduleRequestSerial;
+
+            try {
+                const response = await fetch("/api/schedule", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ schedule: scheduleID })
+                });
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const data = await response.json();
+                if (serial === scheduleRequestSerial) {
+                    showSchedule(data.schedule);
+                }
+                updateStatus();
+            } catch (err) {
+                console.error("Error updating simulation schedule:", err);
+                if (serial === scheduleRequestSerial) {
+                    scheduleInitialized = false;
+                    await updateStatus(true);
+                }
+            }
+        }
+
         function setGroupMode(mode, persist) {
             groupMode = mode === "zones" ? "zones" : "rooms";
             groupButtons.forEach(function (button) {
@@ -1495,6 +1590,7 @@
                     ? new Date(data.next_event).toLocaleString()
                     : "Not scheduled";
                 syncSpeedControls(data);
+                syncScheduleControls(data);
 
                 if (!data.configured) {
                     lastStatusSignature = null;
@@ -1666,7 +1762,7 @@
 
         setInterval(updateStatus, 3000);
         loadConfig();
-        updateStatus();
+        loadSchedules().then(updateStatus);
     </script>
 </body>
 </html>

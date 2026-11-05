@@ -3,14 +3,17 @@ package config
 import (
 	"encoding/json"
 	"os"
+
+	"lampengeist/internal/schedules"
 )
 
 type Config struct {
-	BridgeIP         string          `json:"bridge_ip"`
-	Token            string          `json:"token"`
-	Enabled          bool            `json:"enabled"`
-	SimulationLights map[string]bool `json:"simulation_lights,omitempty"`
-	SimulationSpeed  int             `json:"simulation_speed,omitempty"`
+	BridgeIP           string          `json:"bridge_ip"`
+	Token              string          `json:"token"`
+	Enabled            bool            `json:"enabled"`
+	SimulationLights   map[string]bool `json:"simulation_lights,omitempty"`
+	SimulationSpeed    int             `json:"simulation_speed,omitempty"`
+	SimulationSchedule string          `json:"simulation_schedule,omitempty"`
 }
 
 const (
@@ -37,7 +40,11 @@ func IsLightInSimulation(settings map[string]bool, lightID string) bool {
 }
 
 func LoadConfig() Config {
-	cfg := Config{Enabled: true, SimulationSpeed: MinSimulationSpeed}
+	cfg := Config{
+		Enabled:            true,
+		SimulationSpeed:    MinSimulationSpeed,
+		SimulationSchedule: schedules.DefaultID,
+	}
 
 	file, err := os.ReadFile("config.json")
 	if err != nil {
@@ -45,10 +52,15 @@ func LoadConfig() Config {
 	}
 
 	if err := json.Unmarshal(file, &cfg); err != nil {
-		return Config{Enabled: true, SimulationSpeed: MinSimulationSpeed}
+		return Config{
+			Enabled:            true,
+			SimulationSpeed:    MinSimulationSpeed,
+			SimulationSchedule: schedules.DefaultID,
+		}
 	}
 
 	cfg.SimulationSpeed = ClampSimulationSpeed(cfg.SimulationSpeed)
+	cfg.SimulationSchedule = schedules.Normalize(cfg.SimulationSchedule)
 
 	return cfg
 }
