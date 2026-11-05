@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lampengeist Setup</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
+        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        .light-item { padding: 10px; border: 1px solid #eee; border-radius: 4px; text-align: center; }
+        .online { color: green; font-weight: bold; }
+        .offline { color: red; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }
+        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        #bridges-list { list-style: none; padding: 0; margin: 10px 0; }
+        #bridges-list li { margin: 5px 0; padding: 5px; border: 1px solid #eee; border-radius: 4px; }
+        .bridge-item { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .bridge-item:hover { background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <h1>Lampengeist Presence</h1>
+
+    <div class="card">
+        <h2>Configuration</h2>
+        <div id="discovery-section">
+            <button id="scan-bridges-btn">Scan for Bridges</button>
+            <ul id="bridges-list"></ul>
+        </div>
+        <form method="POST" action="/api/config" id="config-form">
+            <label>Bridge IP:</label>
+            <input type="text" name="bridge_ip" id="config-bridge-ip" placeholder="192.168.1.xx" required>
+            <label>API Token:</label>
+            <input type="text" name="token" id="config-token" placeholder="Leave blank to keep the current token">
+            <button type="submit">Save Configuration Manually</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Current Status</h2>
+        <p>Next simulation event: <span id="next-event">Loading...</span></p>
+        <h3>Lamps</h3>
+        <div id="lights-container" class="status-grid">
+            <p>Loading lamps...</p>
+        </div>
+    </div>
+
+    <script>
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/status');
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+                const data = await response.json();
+                document.getElementById('next-event').innerText = data.next_event
+                    ? new Date(data.next_event).toLocaleString()
+                    : 'Not scheduled';
+                const container = document.getElementById('lights-container');
+                if (!data.configured) {
+                    container.innerHTML = '<p>No bridge configured. Scan and pair a bridge below.</p>';
+                    return;
+                }
+                container.innerHTML = '';
+                if (data.lights.length === 0) {
+                    container.innerHTML = '<p>No lamps found.</p>';
+                    return;
+                }
+                data.lights.forEach(light => {
+                    const div = document.createElement('div');
+                    div.className = 'light-item';
+                    const statusClass = light.state.on ? 'online' : 'offline';
+                    const statusText = light.state.on ? 'ON' : 'OFF';
+                    div.innerHTML = `<strong>${light.name || 'Light ' + light.id}</strong><br><span class="${statusClass}">${statusText}</span>`;
+                    container.appendChild(div);
+                });
+            } catch (err) {
+                console.error('Error fetching status:', err);
+            }
+        }
+
+        document.getElementById('scan-bridges-btn').addEventListener('click', async () => {
+            const btn = document.getElementById('scan-bridges-btn');
+            const list = document.getElementById('bridges-list');
+            btn.innerText = 'Scanning...';
+            list.innerHTML = '';
+            try {
+                const response = await fetch('/api/discover');
+                const bridges = await response.json();
+                if (bridges.length === 0) {
+                    list.innerHTML = '<li style="color: gray;">No bridges found.</li>';
+                } else {
+                    bridges.forEach((bridge, index) => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `
+                            <div class="bridge-item">
+                                <span style="flex-grow: 1;">${bridge.name}</span>
+                                <span style="color: #666;">${bridge.ip}</span>
+                                <button class="pair-btn" onclick="pairBridge('${bridge.ip}', this)">Pair</button>
+                            </div>
+                        `;
+                        list.appendChild(li);
+                    });
+                }
+            } catch (err) {
+                console.error('Discovery error:', err);
+                list.innerHTML = '<li style="color: red;">Error scanning for bridges.</li>';
+            } finally {
+                btn.innerText = 'Scan for Bridges';
+            }
+        });
+
+        async function pairBridge(ip, button) {
+            const btn = button;
+            const originalText = btn.innerText;
+            btn.disabled = true;
+            btn.innerText = 'Pairing...';
+            
+            const discoverySection = document.getElementById('discovery-section');
+            let statusMsg = document.getElementById('pairing-status');
+            if (!statusMsg) {
+                statusMsg = document.createElement('p');
+                statusMsg.id = 'pairing-status';
+                discoverySection.appendChild(statusMsg);
+            }
+            statusMsg.innerText = 'Please press the pairing button on your Hue Bridge within 60 seconds...';
+            statusMsg.style.color = '#007bff';
+
+            try {
+                const formData = new FormData();
+                formData.append('bridge_ip', ip);
+                const response = await fetch('/api/join', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('config-bridge-ip').value = data.bridge_ip;
+                    alert('Successfully paired!');
+                    statusMsg.innerText = 'Successfully joined.';
+                    statusMsg.style.color = 'green';
+                    updateStatus();
+                } else {
+                    const errorText = await response.text();
+                    alert('Failed to pair bridge: ' + errorText);
+                    statusMsg.innerText = 'Pairing failed: ' + errorText;
+                    statusMsg.style.color = 'red';
+                }
+            } catch (err) {
+                console.error('Pairing error:', err);
+                alert('Error during pairing.');
+                statusMsg.innerText = 'Error during pairing.';
+                statusMsg.style.color = 'red';
+            } finally {
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+        }
+
+        document.getElementById('config-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    body: new FormData(e.target)
+                });
+                const text = await response.text();
+                if (!response.ok) {
+                    alert('Failed to save configuration: ' + text);
+                    return;
+                }
+                alert(text);
+                updateStatus();
+            } catch (err) {
+                console.error('Configuration error:', err);
+                alert('Error saving configuration.');
+            }
+        });
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                if (!response.ok) {
+                    return;
+                }
+                const data = await response.json();
+                document.getElementById('config-bridge-ip').value = data.bridge_ip || '';
+            } catch (err) {
+                console.error('Error loading configuration:', err);
+            }
+        }
+
+        setInterval(updateStatus, 3000);
+        loadConfig();
+        updateStatus();
+    </script>
+</body>
+</html>
