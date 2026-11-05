@@ -251,9 +251,77 @@
             box-shadow: 0 0 0 3px var(--danger-soft);
         }
 
+        .lamps-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin: 26px 0 14px;
+        }
+
         .lamps-title {
-            margin: 26px 0 12px;
+            margin: 0;
             font-size: .95rem;
+        }
+
+        .group-switch {
+            display: inline-flex;
+            padding: 3px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--surface-2);
+        }
+
+        .group-switch[hidden] {
+            display: none;
+        }
+
+        .group-switch button {
+            padding: 5px 13px;
+            border: 0;
+            border-radius: 999px;
+            background: transparent;
+            color: var(--muted);
+            font: inherit;
+            font-size: .78rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color .2s ease, color .2s ease;
+        }
+
+        .group-switch button:hover {
+            color: var(--text);
+        }
+
+        .group-switch button.is-active {
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .14);
+        }
+
+        .lights-groups {
+            display: grid;
+            gap: 24px;
+        }
+
+        .lamp-group-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 10px;
+            color: var(--muted);
+            font-size: .82rem;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+        }
+
+        .lamp-group-title::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--border);
         }
 
         .status-grid {
@@ -709,8 +777,14 @@
                 <span class="status-badge" id="status-badge">Connecting...</span>
             </div>
 
-            <h3 class="lamps-title">Lamps</h3>
-            <div id="lights-container" class="status-grid">
+            <div class="lamps-header">
+                <h3 class="lamps-title">Lamps</h3>
+                <div id="group-switch" class="group-switch" role="group" aria-label="Group lamps by" hidden>
+                    <button type="button" data-group-mode="rooms">Rooms</button>
+                    <button type="button" data-group-mode="zones">Zones</button>
+                </div>
+            </div>
+            <div id="lights-container" class="lights-groups">
                 <p class="empty-state">Loading lamps...</p>
             </div>
         </section>
@@ -819,13 +893,53 @@
             }
         });
 
-        let lastLightsSignature = null;
+        let lastStatusSignature = null;
+        let lastStatusData = null;
         const statusBadge = document.getElementById("status-badge");
+        const groupSwitch = document.getElementById("group-switch");
+        const groupButtons = Array.from(groupSwitch.querySelectorAll("button[data-group-mode]"));
+        const GROUP_MODE_KEY = "lampengeist-group-mode";
+        let groupMode = "rooms";
+
+        try {
+            if (localStorage.getItem(GROUP_MODE_KEY) === "zones") {
+                groupMode = "zones";
+            }
+        } catch (e) {
+            // Ignore storage failures (for example private browsing).
+        }
 
         function setStatusBadge(text, state) {
             statusBadge.textContent = text;
             statusBadge.className = "status-badge" + (state ? " " + state : "");
         }
+
+        function setGroupMode(mode, persist) {
+            groupMode = mode === "zones" ? "zones" : "rooms";
+            groupButtons.forEach(function (button) {
+                const active = button.dataset.groupMode === groupMode;
+                button.classList.toggle("is-active", active);
+                button.setAttribute("aria-pressed", active ? "true" : "false");
+            });
+            if (persist) {
+                try {
+                    localStorage.setItem(GROUP_MODE_KEY, groupMode);
+                } catch (e) {
+                    // Ignore storage failures.
+                }
+            }
+            if (lastStatusData) {
+                renderLights(lastStatusData);
+            }
+        }
+
+        groupButtons.forEach(function (button) {
+            button.addEventListener("click", function () {
+                setGroupMode(button.dataset.groupMode, true);
+            });
+        });
+
+        setGroupMode(groupMode, false);
 
         function createLightCard(light) {
             const isOn = Boolean(light.state && light.state.on);
@@ -851,6 +965,73 @@
             return card;
         }
 
+        function showLampEmptyState(message) {
+            const container = document.getElementById("lights-container");
+            container.innerHTML = `
+                <div class="empty-state">
+                    ${LAMP_ICON}
+                    <p></p>
+                </div>
+            `;
+            container.querySelector(".empty-state p").textContent = message;
+        }
+
+        function renderLights(data) {
+            const container = document.getElementById("lights-container");
+            const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+            const zones = Array.isArray(data.zones) ? data.zones : [];
+            const hasRooms = rooms.some(function (group) {
+                return group.lights && group.lights.length > 0;
+            });
+            const hasZones = zones.some(function (group) {
+                return group.lights && group.lights.length > 0;
+            });
+
+            groupSwitch.hidden = !(hasRooms && hasZones);
+
+            let groups = [];
+            if (groupMode === "zones" && hasZones) {
+                groups = zones;
+            } else if (hasRooms) {
+                groups = rooms;
+            } else if (hasZones) {
+                groups = zones;
+            }
+
+            groups = groups.filter(function (group) {
+                return group.lights && group.lights.length > 0;
+            });
+
+            // Older bridges (or the fallback in the API) may only expose lights.
+            if (groups.length === 0 && Array.isArray(data.lights) && data.lights.length > 0) {
+                groups = [{ id: "all", name: "All lamps", lights: data.lights }];
+            }
+
+            if (groups.length === 0) {
+                showLampEmptyState("No lamps found on this bridge.");
+                return;
+            }
+
+            container.innerHTML = "";
+            groups.forEach(function (group) {
+                const section = document.createElement("section");
+                section.className = "lamp-group";
+
+                const title = document.createElement("h4");
+                title.className = "lamp-group-title";
+                title.textContent = group.name || "Lamps";
+
+                const grid = document.createElement("div");
+                grid.className = "status-grid";
+                group.lights.forEach(function (light) {
+                    grid.appendChild(createLightCard(light));
+                });
+
+                section.append(title, grid);
+                container.appendChild(section);
+            });
+        }
+
         async function updateStatus() {
             try {
                 const response = await fetch("/api/status");
@@ -862,42 +1043,26 @@
                     ? new Date(data.next_event).toLocaleString()
                     : "Not scheduled";
 
-                const container = document.getElementById("lights-container");
-
                 if (!data.configured) {
-                    lastLightsSignature = null;
+                    lastStatusSignature = null;
+                    lastStatusData = null;
+                    groupSwitch.hidden = true;
                     setStatusBadge("Not configured", "is-idle");
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            ${LAMP_ICON}
-                            <p>No bridge configured yet. Open the menu to scan and pair a bridge.</p>
-                        </div>
-                    `;
+                    showLampEmptyState("No bridge configured yet. Open the menu to scan and pair a bridge.");
                     return;
                 }
 
                 setStatusBadge("Updating live");
 
-                const signature = JSON.stringify(data.lights);
-                if (signature === lastLightsSignature) {
+                // Re-render only when something actually changed. The backend
+                // returns sorted data, so cards keep a stable order.
+                const signature = JSON.stringify([data.lights, data.rooms, data.zones]);
+                if (signature === lastStatusSignature) {
                     return;
                 }
-                lastLightsSignature = signature;
-
-                container.innerHTML = "";
-                if (data.lights.length === 0) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            ${LAMP_ICON}
-                            <p>No lamps found on this bridge.</p>
-                        </div>
-                    `;
-                    return;
-                }
-
-                data.lights.forEach(function (light) {
-                    container.appendChild(createLightCard(light));
-                });
+                lastStatusSignature = signature;
+                lastStatusData = data;
+                renderLights(data);
             } catch (err) {
                 console.error("Error fetching status:", err);
                 setStatusBadge("Connection lost", "is-error");

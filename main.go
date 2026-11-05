@@ -11,7 +11,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,6 +33,23 @@ var (
 	cfg     config.Config
 	appCtx  context.Context
 )
+
+type lightState struct {
+	On  bool `json:"on"`
+	Bri int  `json:"bri"`
+}
+
+type lightResponse struct {
+	ID    string     `json:"id"`
+	Name  string     `json:"name"`
+	State lightState `json:"state"`
+}
+
+type lightGroup struct {
+	ID     string          `json:"id"`
+	Name   string          `json:"name"`
+	Lights []lightResponse `json:"lights"`
+}
 
 func main() {
 	cfg = config.LoadConfig()
@@ -235,40 +253,16 @@ func main() {
 		currentSim := sim
 		stateMu.Unlock()
 
-		type lightResponse struct {
-			ID    int    `json:"id"`
-			Name  string `json:"name"`
-			State struct {
-				On  bool `json:"on"`
-				Bri int  `json:"bri"`
-			} `json:"state"`
-		}
-
 		lights := []lightResponse{}
+		rooms := []lightGroup{}
+		zones := []lightGroup{}
+
 		if currentClient != nil {
-			lightsMap, err := currentClient.GetLights(r.Context())
+			var err error
+			lights, rooms, zones, err = buildLightGroups(r.Context(), currentClient)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadGateway)
 				return
-			}
-
-			for _, l := range lightsMap {
-				id, _ := strconv.Atoi(l.Id)
-				bri := 0
-				if l.Dimming != nil && l.Dimming.Brightness != nil {
-					bri = int(*l.Dimming.Brightness)
-				}
-				lights = append(lights, lightResponse{
-					ID:   id,
-					Name: l.Metadata.Name,
-					State: struct {
-						On  bool `json:"on"`
-						Bri int  `json:"bri"`
-					}{
-						On:  l.On.On,
-						Bri: bri,
-					},
-				})
 			}
 		}
 
@@ -280,10 +274,14 @@ func main() {
 
 		status := struct {
 			Lights     []lightResponse `json:"lights"`
+			Rooms      []lightGroup    `json:"rooms"`
+			Zones      []lightGroup    `json:"zones"`
 			NextEvent  *time.Time      `json:"next_event"`
 			Configured bool            `json:"configured"`
 		}{
 			Lights:     lights,
+			Rooms:      rooms,
+			Zones:      zones,
 			NextEvent:  nextEvent,
 			Configured: currentClient != nil,
 		}
@@ -312,6 +310,180 @@ func main() {
 	log.Println("Shutting down...")
 	cancel()
 	srv.Shutdown(context.Background())
+}
+
+// buildLightGroups fetches all resources needed to show lights grouped by room
+// and zone. Everything is sorted deterministically because openhue-go returns
+// maps, which do not preserve the order used in the Hue app.
+func buildLightGroups(ctx context.Context, home *openhue.Home) ([]lightResponse, []lightGroup, []lightGroup, error) {
+	lightsMap, err := home.GetLights(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	devicesMap, err := home.GetDevices(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	roomsMap, err := home.GetRooms(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	zonesMap, err := home.GetZones(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Index every light once so groups can share the same values.
+	lightsByID := make(map[string]lightResponse, len(lightsMap))
+	allLights := make([]lightResponse, 0, len(lightsMap))
+	for id, light := range lightsMap {
+		response := toLightResponse(id, light)
+		lightsByID[id] = response
+		allLights = append(allLights, response)
+	}
+	sortLightsByName(allLights)
+
+	// Rooms reference devices, while zones reference lights directly. Map each
+	// device to the light services it exposes before walking the groups.
+	deviceLights := make(map[string][]string, len(devicesMap))
+	for deviceID, device := range devicesMap {
+		for _, service := range device.Services {
+			if service.Rtype == openhue.ResourceIdentifierRtypeLight {
+				deviceLights[deviceID] = append(deviceLights[deviceID], service.Rid)
+			}
+		}
+	}
+
+	collectGroups := func(groups map[string]openhue.RoomGet) []lightGroup {
+		result := make([]lightGroup, 0, len(groups))
+
+		for groupID, group := range groups {
+			groupLights := []lightResponse{}
+			seen := make(map[string]bool)
+
+			for _, child := range group.Children {
+				var lightIDs []string
+				switch child.Rtype {
+				case openhue.ResourceIdentifierRtypeDevice:
+					lightIDs = deviceLights[child.Rid]
+				case openhue.ResourceIdentifierRtypeLight:
+					lightIDs = []string{child.Rid}
+				}
+
+				for _, lightID := range lightIDs {
+					light, ok := lightsByID[lightID]
+					if !ok || seen[lightID] {
+						continue
+					}
+					seen[lightID] = true
+					groupLights = append(groupLights, light)
+				}
+			}
+
+			if len(groupLights) == 0 {
+				continue
+			}
+
+			sortLightsByName(groupLights)
+			result = append(result, lightGroup{
+				ID:     groupID,
+				Name:   group.Metadata.Name,
+				Lights: groupLights,
+			})
+		}
+
+		sortGroupsByName(result)
+		return result
+	}
+
+	rooms := collectGroups(roomsMap)
+	zones := collectGroups(zonesMap)
+
+	// Keep lamps that are not part of any room/zone reachable from the UI.
+	if len(rooms) > 0 {
+		rooms = appendOtherLights(rooms, allLights)
+	}
+	if len(zones) > 0 {
+		zones = appendOtherLights(zones, allLights)
+	}
+
+	// Fall back to a single group when the bridge does not define rooms or
+	// zones. The flat lights list is still returned for older clients.
+	if len(rooms) == 0 {
+		rooms = []lightGroup{{ID: "all", Name: "All lamps", Lights: allLights}}
+	}
+	if len(zones) == 0 {
+		zones = []lightGroup{{ID: "all", Name: "All lamps", Lights: allLights}}
+	}
+
+	return allLights, rooms, zones, nil
+}
+
+func toLightResponse(id string, light openhue.LightGet) lightResponse {
+	bri := 0
+	if light.Dimming != nil && light.Dimming.Brightness != nil {
+		bri = int(*light.Dimming.Brightness)
+	}
+
+	return lightResponse{
+		ID:   id,
+		Name: light.Metadata.Name,
+		State: lightState{
+			On:  light.On.On,
+			Bri: bri,
+		},
+	}
+}
+
+func appendOtherLights(groups []lightGroup, allLights []lightResponse) []lightGroup {
+	grouped := make(map[string]bool)
+	for _, group := range groups {
+		for _, light := range group.Lights {
+			grouped[light.ID] = true
+		}
+	}
+
+	other := []lightResponse{}
+	for _, light := range allLights {
+		if !grouped[light.ID] {
+			other = append(other, light)
+		}
+	}
+
+	if len(other) == 0 {
+		return groups
+	}
+
+	return append(groups, lightGroup{
+		ID:     "other",
+		Name:   "Other lights",
+		Lights: other,
+	})
+}
+
+func sortLightsByName(lights []lightResponse) {
+	sort.SliceStable(lights, func(i, j int) bool {
+		left := strings.ToLower(lights[i].Name)
+		right := strings.ToLower(lights[j].Name)
+		if left != right {
+			return left < right
+		}
+		return lights[i].ID < lights[j].ID
+	})
+}
+
+func sortGroupsByName(groups []lightGroup) {
+	sort.SliceStable(groups, func(i, j int) bool {
+		left := strings.ToLower(groups[i].Name)
+		right := strings.ToLower(groups[j].Name)
+		if left != right {
+			return left < right
+		}
+		return groups[i].ID < groups[j].ID
+	})
 }
 
 // parseRequestForm parses both URL-encoded and multipart form bodies. Browsers
