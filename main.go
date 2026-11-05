@@ -40,9 +40,10 @@ type lightState struct {
 }
 
 type lightResponse struct {
-	ID    string     `json:"id"`
-	Name  string     `json:"name"`
-	State lightState `json:"state"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	State        lightState `json:"state"`
+	InSimulation bool       `json:"in_simulation"`
 }
 
 type lightGroup struct {
@@ -247,10 +248,68 @@ func main() {
 		})
 	})
 
+	mux.HandleFunc("/api/simulation", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var request struct {
+			LightIDs []string `json:"light_ids"`
+			Enabled  bool     `json:"enabled"`
+		}
+
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err := decoder.Decode(&request); err != nil {
+			http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(request.LightIDs) == 0 {
+			http.Error(w, "light_ids must not be empty", http.StatusBadRequest)
+			return
+		}
+
+		stateMu.Lock()
+		defer stateMu.Unlock()
+
+		newCfg := cfg
+		newCfg.SimulationLights = copySimulationLights(cfg.SimulationLights)
+
+		changed := false
+		for _, lightID := range request.LightIDs {
+			if lightID == "" {
+				continue
+			}
+			newCfg.SimulationLights[lightID] = request.Enabled
+			changed = true
+		}
+		if !changed {
+			http.Error(w, "light_ids must not be empty", http.StatusBadRequest)
+			return
+		}
+		if len(newCfg.SimulationLights) == 0 {
+			newCfg.SimulationLights = nil
+		}
+
+		if err := store.Save(newCfg); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		cfg = newCfg
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"ok":                true,
+			"simulation_lights": newCfg.SimulationLights,
+		})
+	})
+
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		stateMu.Lock()
 		currentClient := client
 		currentSim := sim
+		simulationLights := copySimulationLights(cfg.SimulationLights)
 		stateMu.Unlock()
 
 		lights := []lightResponse{}
@@ -259,7 +318,7 @@ func main() {
 
 		if currentClient != nil {
 			var err error
-			lights, rooms, zones, err = buildLightGroups(r.Context(), currentClient)
+			lights, rooms, zones, err = buildLightGroups(r.Context(), currentClient, simulationLights)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadGateway)
 				return
@@ -315,7 +374,7 @@ func main() {
 // buildLightGroups fetches all resources needed to show lights grouped by room
 // and zone. Everything is sorted deterministically because openhue-go returns
 // maps, which do not preserve the order used in the Hue app.
-func buildLightGroups(ctx context.Context, home *openhue.Home) ([]lightResponse, []lightGroup, []lightGroup, error) {
+func buildLightGroups(ctx context.Context, home *openhue.Home, simulationLights map[string]bool) ([]lightResponse, []lightGroup, []lightGroup, error) {
 	lightsMap, err := home.GetLights(ctx)
 	if err != nil {
 		return nil, nil, nil, err
@@ -340,7 +399,7 @@ func buildLightGroups(ctx context.Context, home *openhue.Home) ([]lightResponse,
 	lightsByID := make(map[string]lightResponse, len(lightsMap))
 	allLights := make([]lightResponse, 0, len(lightsMap))
 	for id, light := range lightsMap {
-		response := toLightResponse(id, light)
+		response := toLightResponse(id, light, simulationLights)
 		lightsByID[id] = response
 		allLights = append(allLights, response)
 	}
@@ -422,7 +481,7 @@ func buildLightGroups(ctx context.Context, home *openhue.Home) ([]lightResponse,
 	return allLights, rooms, zones, nil
 }
 
-func toLightResponse(id string, light openhue.LightGet) lightResponse {
+func toLightResponse(id string, light openhue.LightGet, simulationLights map[string]bool) lightResponse {
 	bri := 0
 	if light.Dimming != nil && light.Dimming.Brightness != nil {
 		bri = int(*light.Dimming.Brightness)
@@ -435,6 +494,7 @@ func toLightResponse(id string, light openhue.LightGet) lightResponse {
 			On:  light.On.On,
 			Bri: bri,
 		},
+		InSimulation: config.IsLightInSimulation(simulationLights, id),
 	}
 }
 
@@ -466,6 +526,11 @@ func appendOtherLights(groups []lightGroup, allLights []lightResponse) []lightGr
 
 func sortLightsByName(lights []lightResponse) {
 	sort.SliceStable(lights, func(i, j int) bool {
+		// Lamps excluded from the simulation always sort after active ones.
+		if lights[i].InSimulation != lights[j].InSimulation {
+			return lights[i].InSimulation
+		}
+
 		left := strings.ToLower(lights[i].Name)
 		right := strings.ToLower(lights[j].Name)
 		if left != right {
@@ -484,6 +549,14 @@ func sortGroupsByName(groups []lightGroup) {
 		}
 		return groups[i].ID < groups[j].ID
 	})
+}
+
+func copySimulationLights(settings map[string]bool) map[string]bool {
+	result := make(map[string]bool, len(settings))
+	for id, enabled := range settings {
+		result[id] = enabled
+	}
+	return result
 }
 
 // parseRequestForm parses both URL-encoded and multipart form bodies. Browsers

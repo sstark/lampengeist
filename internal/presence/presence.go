@@ -3,6 +3,7 @@ package presence
 import (
 	"context"
 	"github.com/openhue/openhue-go"
+	"lampengeist/internal/config"
 	"lampengeist/internal/storage"
 	"log"
 	"math/rand"
@@ -76,10 +77,31 @@ func (s *Simulator) step(ctx context.Context) {
 		return
 	}
 
+	// Lamp settings are persisted in config.json. Reload them before each
+	// step so toggles made in the UI take effect without a restart.
+	simulationLights := map[string]bool{}
+	if s.store != nil {
+		storedConfig, err := s.store.Load()
+		if err != nil {
+			log.Printf("Simulator: error loading config: %v", err)
+		} else {
+			simulationLights = storedConfig.SimulationLights
+		}
+	}
+
 	keys := make([]string, 0, len(lights))
 	for k := range lights {
+		if !config.IsLightInSimulation(simulationLights, k) {
+			continue
+		}
 		keys = append(keys, k)
 	}
+
+	if len(keys) == 0 {
+		log.Println("Simulator: no lamps enabled for simulation")
+		return
+	}
+
 	lightKey := keys[rand.Intn(len(keys))]
 	light := lights[lightKey]
 

@@ -22,12 +22,14 @@ func (s *Store) Save(cfg config.Config) error {
 	return os.WriteFile(s.FilePath, data, 0644)
 }
 
-func (s *Store) Load() error {
+func (s *Store) Load() (config.Config, error) {
 	data, err := os.ReadFile(s.FilePath)
 	if err != nil {
-		return err
+		return config.Config{}, err
 	}
 	var cfg config.Config
-	json.Unmarshal(data, &cfg)
-	return nil
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return config.Config{}, err
+	}
+	return cfg, nil
 }

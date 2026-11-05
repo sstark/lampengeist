@@ -305,11 +305,19 @@
             gap: 24px;
         }
 
-        .lamp-group-title {
+        .lamp-group-header {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             margin: 0 0 10px;
+        }
+
+        .lamp-group-title {
+            display: flex;
+            flex: 1;
+            align-items: center;
+            gap: 10px;
+            margin: 0;
             color: var(--muted);
             font-size: .82rem;
             font-weight: 700;
@@ -322,6 +330,87 @@
             flex: 1;
             height: 1px;
             background: var(--border);
+        }
+
+        .group-toggle-label {
+            color: var(--muted);
+            font-size: .7rem;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-flex;
+            flex-shrink: 0;
+            width: 34px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .switch-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .switch-slider {
+            position: absolute;
+            inset: 0;
+            border: 1px solid var(--border-strong);
+            border-radius: 999px;
+            background: var(--surface-3);
+            transition: background-color .2s ease, border-color .2s ease;
+        }
+
+        .switch-slider::after {
+            content: "";
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--muted);
+            transition: transform .2s ease, background-color .2s ease;
+        }
+
+        .switch-input:checked + .switch-slider,
+        .switch-input:indeterminate + .switch-slider {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+        }
+
+        .switch-input:checked + .switch-slider::after {
+            transform: translateX(14px);
+            background: var(--accent);
+        }
+
+        .switch-input:indeterminate + .switch-slider::after {
+            transform: translateX(7px);
+            background: var(--accent);
+        }
+
+        .switch-input:focus-visible + .switch-slider {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        .switch-input:disabled + .switch-slider {
+            opacity: .45;
+            cursor: wait;
+        }
+
+        .card-switch {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 1;
         }
 
         .status-grid {
@@ -348,8 +437,25 @@
                 var(--surface-2);
         }
 
+        .light-item.is-excluded {
+            border-style: dashed;
+            background: var(--surface-2);
+        }
+
+        .light-item.is-excluded .lamp-visual,
+        .light-item.is-excluded .light-name,
+        .light-item.is-excluded .light-meta,
+        .light-item.is-excluded .brightness-track {
+            opacity: .4;
+            filter: grayscale(1);
+        }
+
         .light-item:hover {
             transform: translateY(-2px);
+        }
+
+        .light-item.is-excluded:hover {
+            transform: none;
         }
 
         .lamp-visual {
@@ -430,6 +536,17 @@
             font-size: .68rem;
             font-weight: 700;
             letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .sim-pill {
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: var(--surface-3);
+            color: var(--muted);
+            font-size: .68rem;
+            font-weight: 700;
+            letter-spacing: .06em;
             text-transform: uppercase;
         }
 
@@ -941,27 +1058,66 @@
 
         setGroupMode(groupMode, false);
 
+        function createSwitch(checked, label, indeterminate) {
+            const wrapper = document.createElement("label");
+            wrapper.className = "switch";
+            wrapper.title = label;
+
+            const input = document.createElement("input");
+            input.type = "checkbox";
+            input.className = "switch-input";
+            input.checked = checked;
+            input.indeterminate = Boolean(indeterminate);
+            input.setAttribute("aria-label", label);
+
+            const slider = document.createElement("span");
+            slider.className = "switch-slider";
+            slider.setAttribute("aria-hidden", "true");
+
+            wrapper.append(input, slider);
+            return { wrapper: wrapper, input: input };
+        }
+
         function createLightCard(light) {
             const isOn = Boolean(light.state && light.state.on);
+            const inSimulation = light.in_simulation !== false;
             const bri = Math.max(0, Math.min(254, Number(light.state && light.state.bri) || 0));
             const percent = Math.round((bri / 254) * 100);
             const name = light.name || ("Light " + light.id);
 
             const card = document.createElement("article");
-            card.className = "light-item " + (isOn ? "is-on" : "is-off");
+            card.className = "light-item " + (isOn ? "is-on" : "is-off") + (inSimulation ? "" : " is-excluded");
             card.innerHTML = `
                 <div class="lamp-visual">${LAMP_ICON}</div>
                 <h3 class="light-name"></h3>
                 <div class="light-meta">
                     <span class="state-pill">${isOn ? "On" : "Off"}</span>
                     <span class="brightness">${isOn ? percent + "%" : "&mdash;"}</span>
+                    ${inSimulation ? "" : '<span class="sim-pill">Paused</span>'}
                 </div>
                 <div class="brightness-track" aria-hidden="true">
                     <div class="brightness-fill" style="width:${isOn ? percent : 0}%"></div>
                 </div>
             `;
             card.querySelector(".light-name").textContent = name;
-            card.setAttribute("aria-label", name + " is " + (isOn ? "on at " + percent + " percent brightness" : "off"));
+
+            const simulationToggle = createSwitch(
+                inSimulation,
+                inSimulation
+                    ? "Remove " + name + " from the simulation"
+                    : "Include " + name + " in the simulation"
+            );
+            simulationToggle.wrapper.classList.add("card-switch");
+            simulationToggle.input.addEventListener("change", function () {
+                setLightsSimulation([light.id], simulationToggle.input.checked, [simulationToggle.input]);
+            });
+            card.appendChild(simulationToggle.wrapper);
+
+            card.setAttribute(
+                "aria-label",
+                name + " is " + (isOn ? "on at " + percent + " percent brightness" : "off") +
+                (inSimulation ? "" : ", excluded from the simulation")
+            );
             return card;
         }
 
@@ -1017,9 +1173,36 @@
                 const section = document.createElement("section");
                 section.className = "lamp-group";
 
+                const header = document.createElement("div");
+                header.className = "lamp-group-header";
+
                 const title = document.createElement("h4");
                 title.className = "lamp-group-title";
                 title.textContent = group.name || "Lamps";
+
+                const enabledLights = group.lights.filter(function (light) {
+                    return light.in_simulation !== false;
+                }).length;
+                const allEnabled = enabledLights === group.lights.length;
+                const groupToggle = createSwitch(
+                    allEnabled,
+                    allEnabled
+                        ? "Exclude all lamps in " + (group.name || "this group") + " from the simulation"
+                        : "Include all lamps in " + (group.name || "this group") + " in the simulation",
+                    enabledLights > 0 && !allEnabled
+                );
+                groupToggle.input.addEventListener("change", function () {
+                    const lightIDs = group.lights.map(function (light) {
+                        return light.id;
+                    });
+                    setLightsSimulation(lightIDs, groupToggle.input.checked, [groupToggle.input]);
+                });
+
+                const groupToggleLabel = document.createElement("span");
+                groupToggleLabel.className = "group-toggle-label";
+                groupToggleLabel.textContent = "Simulation";
+
+                header.append(title, groupToggleLabel, groupToggle.wrapper);
 
                 const grid = document.createElement("div");
                 grid.className = "status-grid";
@@ -1027,12 +1210,38 @@
                     grid.appendChild(createLightCard(light));
                 });
 
-                section.append(title, grid);
+                section.append(header, grid);
                 container.appendChild(section);
             });
         }
 
-        async function updateStatus() {
+        async function setLightsSimulation(lightIDs, enabled, controls) {
+            controls.forEach(function (control) {
+                control.disabled = true;
+            });
+
+            try {
+                const response = await fetch("/api/simulation", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ light_ids: lightIDs, enabled: enabled })
+                });
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+                await updateStatus(true);
+            } catch (err) {
+                console.error("Error updating simulation setting:", err);
+                controls.forEach(function (control) {
+                    control.disabled = false;
+                });
+                // Re-sync with the server in case the optimistic checkbox
+                // state does not match the stored setting.
+                await updateStatus(true);
+            }
+        }
+
+        async function updateStatus(force) {
             try {
                 const response = await fetch("/api/status");
                 if (!response.ok) {
@@ -1057,7 +1266,7 @@
                 // Re-render only when something actually changed. The backend
                 // returns sorted data, so cards keep a stable order.
                 const signature = JSON.stringify([data.lights, data.rooms, data.zones]);
-                if (signature === lastStatusSignature) {
+                if (!force && signature === lastStatusSignature) {
                     return;
                 }
                 lastStatusSignature = signature;

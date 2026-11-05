@@ -6,9 +6,17 @@ import (
 )
 
 type Config struct {
-	BridgeIP string `json:"bridge_ip"`
-	Token    string `json:"token"`
-	Enabled  bool   `json:"enabled"`
+	BridgeIP         string          `json:"bridge_ip"`
+	Token            string          `json:"token"`
+	Enabled          bool            `json:"enabled"`
+	SimulationLights map[string]bool `json:"simulation_lights,omitempty"`
+}
+
+// IsLightInSimulation reports whether a light takes part in the simulation.
+// Lights without an explicit setting are enabled by default.
+func IsLightInSimulation(settings map[string]bool, lightID string) bool {
+	enabled, ok := settings[lightID]
+	return !ok || enabled
 }
 
 func LoadConfig() Config {
