@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +20,9 @@ import (
 	"lampengeist/internal/presence"
 	"lampengeist/internal/storage"
 )
+
+//go:embed templates
+var templateFiles embed.FS
 
 var (
 	stateMu sync.Mutex
@@ -46,9 +51,14 @@ func main() {
 		go sim.Run(ctx)
 	}
 
-	// Web server setup
+	// Web server setup. The UI is embedded in the binary so it is fully
+	// self-contained and needs no files next to the executable.
+	templateRoot, err := fs.Sub(templateFiles, "templates")
+	if err != nil {
+		log.Fatalf("Failed to load embedded templates: %v", err)
+	}
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir("./templates")))
+	mux.Handle("/", http.FileServer(http.FS(templateRoot)))
 
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

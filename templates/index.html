@@ -3,193 +3,1046 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lampengeist Setup</title>
+    <meta name="theme-color" content="#f2efe9" id="theme-color">
+    <title>Lampengeist</title>
+    <script>
+        (function () {
+            var theme = "light";
+            try {
+                var saved = localStorage.getItem("lampengeist-theme");
+                theme = saved || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+            } catch (e) {
+                if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+                    theme = "dark";
+                }
+            }
+            document.documentElement.setAttribute("data-theme", theme);
+        })();
+    </script>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
-        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-        .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-        .light-item { padding: 10px; border: 1px solid #eee; border-radius: 4px; text-align: center; }
-        .online { color: green; font-weight: bold; }
-        .offline { color: red; font-weight: bold; }
-        input[type="text"] { width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }
-        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
-        button:disabled { background-color: #cccccc; cursor: not-allowed; }
-        #bridges-list { list-style: none; padding: 0; margin: 10px 0; }
-        #bridges-list li { margin: 5px 0; padding: 5px; border: 1px solid #eee; border-radius: 4px; }
-        .bridge-item { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-        .bridge-item:hover { background-color: #f8f9fa; }
+        :root {
+            color-scheme: light;
+            --bg: #f2efe9;
+            --bg-glow: #fbf6ec;
+            --surface: #fffdf8;
+            --surface-2: #f6f1e7;
+            --surface-3: #ece4d5;
+            --text: #2c2721;
+            --muted: #7d7468;
+            --border: #e1d8c8;
+            --border-strong: #cfc3ae;
+            --accent: #d97706;
+            --accent-strong: #b45309;
+            --accent-soft: rgba(217, 119, 6, .12);
+            --danger: #b91c1c;
+            --danger-soft: rgba(185, 28, 28, .16);
+            --online: #15803d;
+            --online-soft: rgba(21, 128, 61, .18);
+            --shadow: 0 10px 30px rgba(70, 55, 30, .10);
+            --bulb-on: #ffc44d;
+            --bulb-off: #d8cebd;
+            --bulb-stroke: #b7aa94;
+            --overlay: rgba(32, 26, 18, .45);
+        }
+
+        html[data-theme="dark"] {
+            color-scheme: dark;
+            --bg: #121316;
+            --bg-glow: #1a1c21;
+            --surface: #1c1e23;
+            --surface-2: #24272e;
+            --surface-3: #2c3038;
+            --text: #f1ece2;
+            --muted: #a29a8d;
+            --border: #323742;
+            --border-strong: #464d5a;
+            --accent: #f5b13d;
+            --accent-strong: #ffc96b;
+            --accent-soft: rgba(245, 177, 61, .15);
+            --danger: #f87171;
+            --danger-soft: rgba(248, 113, 113, .2);
+            --online: #4ade80;
+            --online-soft: rgba(74, 222, 128, .2);
+            --shadow: 0 14px 36px rgba(0, 0, 0, .45);
+            --bulb-on: #ffd166;
+            --bulb-off: #3a3f49;
+            --bulb-stroke: #5a626f;
+            --overlay: rgba(0, 0, 0, .6);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            overflow-x: hidden;
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            color: var(--text);
+            line-height: 1.6;
+            background:
+                radial-gradient(900px 500px at 50% -10%, var(--bg-glow), transparent 70%),
+                var(--bg);
+            transition: background-color .25s ease, color .25s ease;
+        }
+
+        body.drawer-open {
+            overflow: hidden;
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        .app-header {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 28px 20px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .brand h1 {
+            margin: 0;
+            font-size: clamp(1.5rem, 4vw, 2rem);
+            letter-spacing: -.02em;
+            line-height: 1.15;
+        }
+
+        .brand p {
+            margin: 2px 0 0;
+            color: var(--muted);
+            font-size: .9rem;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .icon-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            padding: 0;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+            color: var(--text);
+            cursor: pointer;
+            transition: background-color .2s ease, border-color .2s ease, transform .2s ease;
+        }
+
+        .icon-btn:hover {
+            background: var(--surface-2);
+            border-color: var(--border-strong);
+            transform: translateY(-1px);
+        }
+
+        .icon-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        #theme-toggle .icon-moon {
+            display: none;
+        }
+
+        html[data-theme="dark"] #theme-toggle .icon-sun {
+            display: none;
+        }
+
+        html[data-theme="dark"] #theme-toggle .icon-moon {
+            display: block;
+        }
+
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 20px 60px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .eyebrow {
+            margin: 0 0 4px;
+            text-transform: uppercase;
+            letter-spacing: .12em;
+            font-size: .72rem;
+            font-weight: 700;
+            color: var(--muted);
+        }
+
+        .status-top {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .card h2 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+        .next-event {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin: 8px 0 0;
+            color: var(--muted);
+            font-size: .92rem;
+        }
+
+        .next-event span {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .inline-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 5px 10px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--surface-2);
+            color: var(--muted);
+            font-size: .75rem;
+            font-weight: 600;
+        }
+
+        .status-badge::before {
+            content: "";
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--online);
+            box-shadow: 0 0 0 3px var(--online-soft);
+        }
+
+        .status-badge.is-idle::before {
+            background: var(--muted);
+            box-shadow: none;
+        }
+
+        .status-badge.is-error::before {
+            background: var(--danger);
+            box-shadow: 0 0 0 3px var(--danger-soft);
+        }
+
+        .lamps-title {
+            margin: 26px 0 12px;
+            font-size: .95rem;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 14px;
+        }
+
+        .light-item {
+            position: relative;
+            padding: 18px 16px 16px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--surface-2);
+            text-align: center;
+            overflow: hidden;
+            transition: border-color .25s ease, background-color .25s ease, transform .2s ease;
+        }
+
+        .light-item.is-on {
+            border-color: var(--border-strong);
+            background:
+                radial-gradient(circle at 50% 18%, var(--accent-soft), transparent 64%),
+                var(--surface-2);
+        }
+
+        .light-item:hover {
+            transform: translateY(-2px);
+        }
+
+        .lamp-visual {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 6px;
+        }
+
+        .lamp-icon {
+            width: 76px;
+            height: 76px;
+            overflow: visible;
+        }
+
+        .lamp-halo {
+            fill: var(--bulb-on);
+            opacity: 0;
+            transition: opacity .3s ease;
+        }
+
+        .light-item.is-on .lamp-halo {
+            opacity: .16;
+        }
+
+        .lamp-rays {
+            stroke: var(--bulb-on);
+            stroke-width: 3;
+            stroke-linecap: round;
+            opacity: 0;
+            transition: opacity .3s ease;
+        }
+
+        .light-item.is-on .lamp-rays {
+            opacity: .9;
+        }
+
+        .lamp-bulb {
+            fill: var(--bulb-off);
+            stroke: var(--bulb-stroke);
+            stroke-width: 1.6;
+            transition: fill .3s ease, stroke .3s ease;
+        }
+
+        .light-item.is-on .lamp-bulb {
+            fill: var(--bulb-on);
+            stroke: var(--bulb-on);
+        }
+
+        .lamp-cap {
+            fill: var(--bulb-stroke);
+            transition: fill .3s ease;
+        }
+
+        .light-item.is-on .lamp-icon {
+            filter: drop-shadow(0 0 12px rgba(255, 200, 90, .45));
+        }
+
+        .light-name {
+            margin: 4px 0 2px;
+            font-size: .95rem;
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+
+        .light-meta {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: .8rem;
+            color: var(--muted);
+        }
+
+        .state-pill {
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: var(--surface-3);
+            font-size: .68rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .light-item.is-on .state-pill {
+            color: var(--accent-strong);
+            background: var(--accent-soft);
+        }
+
+        .brightness {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .brightness-track {
+            margin-top: 10px;
+            height: 5px;
+            border-radius: 999px;
+            background: var(--surface-3);
+            overflow: hidden;
+        }
+
+        .brightness-fill {
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+            transition: width .3s ease;
+        }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            padding: 30px 20px;
+            border: 1px dashed var(--border);
+            border-radius: 16px;
+            color: var(--muted);
+            text-align: center;
+        }
+
+        .empty-state .lamp-icon {
+            width: 62px;
+            height: 62px;
+            opacity: .55;
+        }
+
+        .empty-state p {
+            margin: 0;
+            font-size: .9rem;
+        }
+
+        .drawer-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 20;
+            background: var(--overlay);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity .25s ease, visibility .25s ease;
+        }
+
+        .drawer-overlay.is-visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 30;
+            width: min(440px, 100%);
+            padding: 26px;
+            overflow-y: auto;
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            box-shadow: -18px 0 40px rgba(0, 0, 0, .25);
+            transform: translateX(102%);
+            transition: transform .28s cubic-bezier(.2, .8, .2, 1);
+        }
+
+        .drawer.is-open {
+            transform: translateX(0);
+        }
+
+        .drawer-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 22px;
+        }
+
+        .drawer-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+        .config-section {
+            padding-top: 22px;
+            border-top: 1px solid var(--border);
+        }
+
+        .config-section + .config-section {
+            margin-top: 22px;
+        }
+
+        .config-section h3 {
+            margin: 0 0 4px;
+            font-size: .98rem;
+        }
+
+        .hint {
+            margin: 0 0 14px;
+            color: var(--muted);
+            font-size: .84rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            background: var(--accent);
+            color: #1d1508;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color .2s ease, transform .2s ease, opacity .2s ease;
+        }
+
+        .btn:hover {
+            background: var(--accent-strong);
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: .55;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn.small {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: .8rem;
+        }
+
+        #bridges-list {
+            list-style: none;
+            margin: 14px 0 0;
+            padding: 0;
+            display: grid;
+            gap: 8px;
+        }
+
+        #bridges-list li {
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface-2);
+        }
+
+        #bridges-list li.bridge-empty {
+            color: var(--muted);
+            font-size: .84rem;
+        }
+
+        .bridge-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bridge-name {
+            flex: 1;
+            min-width: 0;
+            font-size: .88rem;
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+
+        .bridge-ip {
+            color: var(--muted);
+            font-size: .78rem;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .status-message {
+            margin: 12px 0 0;
+            font-size: .84rem;
+        }
+
+        .status-message.info {
+            color: var(--accent-strong);
+        }
+
+        .status-message.success {
+            color: var(--online);
+        }
+
+        .status-message.error {
+            color: var(--danger);
+        }
+
+        form label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--muted);
+            font-size: .82rem;
+            font-weight: 600;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            margin: 0 0 16px;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface-2);
+            color: var(--text);
+            font: inherit;
+        }
+
+        input[type="text"]::placeholder {
+            color: var(--muted);
+            opacity: .75;
+        }
+
+        input[type="text"]:focus {
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+            border-color: transparent;
+        }
+
+        @media (max-width: 560px) {
+            .app-header {
+                padding: 20px 16px 14px;
+            }
+
+            main {
+                padding: 0 16px 40px;
+            }
+
+            .card {
+                padding: 18px;
+                border-radius: 16px;
+            }
+
+            .drawer {
+                padding: 20px;
+            }
+
+            .status-grid {
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                transition-duration: .01ms !important;
+                animation-duration: .01ms !important;
+            }
+        }
     </style>
 </head>
 <body>
-    <h1>Lampengeist Presence</h1>
+    <header class="app-header">
+        <div class="brand">
+            <h1>Lampengeist</h1>
+            <p>Presence simulation for your Hue lights</p>
+        </div>
+        <div class="header-actions">
+            <button id="theme-toggle" class="icon-btn" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4"></circle>
+                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+                </svg>
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
+                </svg>
+            </button>
+            <button id="menu-toggle" class="icon-btn" type="button" aria-label="Open configuration" aria-expanded="false" aria-controls="config-drawer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M4 7h16M4 12h16M4 17h16"></path>
+                </svg>
+            </button>
+        </div>
+    </header>
 
-    <div class="card">
-        <h2>Configuration</h2>
-        <div id="discovery-section">
-            <button id="scan-bridges-btn">Scan for Bridges</button>
+    <div id="drawer-overlay" class="drawer-overlay"></div>
+
+    <aside id="config-drawer" class="drawer" aria-hidden="true" aria-labelledby="config-title" inert>
+        <div class="drawer-header">
+            <div>
+                <p class="eyebrow">Settings</p>
+                <h2 id="config-title">Configuration</h2>
+            </div>
+            <button id="drawer-close" class="icon-btn" type="button" aria-label="Close configuration">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18"></path>
+                </svg>
+            </button>
+        </div>
+
+        <section id="discovery-section" class="config-section">
+            <h3>Discover a bridge</h3>
+            <p class="hint">Find Hue bridges on your network, then pair one.</p>
+            <button id="scan-bridges-btn" class="btn" type="button">Scan for Bridges</button>
             <ul id="bridges-list"></ul>
-        </div>
-        <form method="POST" action="/api/config" id="config-form">
-            <label>Bridge IP:</label>
-            <input type="text" name="bridge_ip" id="config-bridge-ip" placeholder="192.168.1.xx" required>
-            <label>API Token:</label>
-            <input type="text" name="token" id="config-token" placeholder="Leave blank to keep the current token">
-            <button type="submit">Save Configuration Manually</button>
-        </form>
-    </div>
+        </section>
 
-    <div class="card">
-        <h2>Current Status</h2>
-        <p>Next simulation event: <span id="next-event">Loading...</span></p>
-        <h3>Lamps</h3>
-        <div id="lights-container" class="status-grid">
-            <p>Loading lamps...</p>
-        </div>
-    </div>
+        <section class="config-section">
+            <h3>Manual setup</h3>
+            <p class="hint">Enter the bridge address and an API token if you already have one.</p>
+            <form method="POST" action="/api/config" id="config-form">
+                <label for="config-bridge-ip">Bridge IP</label>
+                <input type="text" name="bridge_ip" id="config-bridge-ip" placeholder="192.168.1.xx" autocomplete="off" required>
+                <label for="config-token">API token</label>
+                <input type="text" name="token" id="config-token" placeholder="Leave blank to keep the current token" autocomplete="off">
+                <button type="submit" class="btn">Save configuration</button>
+            </form>
+        </section>
+    </aside>
+
+    <main>
+        <section class="card" aria-labelledby="status-title">
+            <div class="status-top">
+                <div>
+                    <p class="eyebrow">Live status</p>
+                    <h2 id="status-title">Current Status</h2>
+                    <p class="next-event">
+                        <svg class="inline-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9"></circle>
+                            <path d="M12 7v5l3 2"></path>
+                        </svg>
+                        Next simulation event: <span id="next-event">Loading...</span>
+                    </p>
+                </div>
+                <span class="status-badge" id="status-badge">Connecting...</span>
+            </div>
+
+            <h3 class="lamps-title">Lamps</h3>
+            <div id="lights-container" class="status-grid">
+                <p class="empty-state">Loading lamps...</p>
+            </div>
+        </section>
+    </main>
 
     <script>
+        const LAMP_ICON = `
+            <svg class="lamp-icon" viewBox="0 0 64 64" aria-hidden="true">
+                <circle class="lamp-halo" cx="32" cy="27" r="27"></circle>
+                <g class="lamp-rays">
+                    <path d="M32 3v5"></path>
+                    <path d="M14.6 9.6l3.5 3.5"></path>
+                    <path d="M49.4 9.6l-3.5 3.5"></path>
+                    <path d="M3 27h5"></path>
+                    <path d="M56 27h5"></path>
+                    <path d="M9.6 45.4l3.5-3.5"></path>
+                    <path d="M54.4 45.4l-3.5-3.5"></path>
+                </g>
+                <path class="lamp-bulb" d="M32 9c-9.4 0-17 7.6-17 17 0 5.4 2.5 10.2 6.4 13.3 1.8 1.4 2.6 3.3 2.6 5.4V47h16v-2.3c0-2.1.8-4 2.6-5.4C46.5 36.2 49 31.4 49 26c0-9.4-7.6-17-17-17z"></path>
+                <rect class="lamp-cap" x="25" y="49" width="14" height="3" rx="1.5"></rect>
+                <path class="lamp-cap" d="M27 54h10l-1 4.2a2 2 0 0 1-2 1.5h-4a2 2 0 0 1-2-1.5z"></path>
+            </svg>
+        `;
+
+        const THEME_KEY = "lampengeist-theme";
+        const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+        const themeToggle = document.getElementById("theme-toggle");
+        const themeColorMeta = document.getElementById("theme-color");
+
+        function currentTheme() {
+            return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+        }
+
+        function applyTheme(theme, persist) {
+            const isDark = theme === "dark";
+            document.documentElement.setAttribute("data-theme", theme);
+            themeToggle.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
+            themeToggle.setAttribute("title", isDark ? "Switch to light mode" : "Switch to dark mode");
+            themeColorMeta.setAttribute("content", isDark ? "#121316" : "#f2efe9");
+            if (persist) {
+                try {
+                    localStorage.setItem(THEME_KEY, theme);
+                } catch (e) {
+                    // Ignore storage failures (for example private browsing).
+                }
+            }
+        }
+
+        themeToggle.addEventListener("click", function () {
+            applyTheme(currentTheme() === "dark" ? "light" : "dark", true);
+        });
+
+        systemDark.addEventListener("change", function (event) {
+            var stored = null;
+            try {
+                stored = localStorage.getItem(THEME_KEY);
+            } catch (e) {
+                // Ignore storage failures.
+            }
+            if (!stored) {
+                applyTheme(event.matches ? "dark" : "light", false);
+            }
+        });
+
+        applyTheme(currentTheme(), false);
+
+        const drawer = document.getElementById("config-drawer");
+        const overlay = document.getElementById("drawer-overlay");
+        const menuToggle = document.getElementById("menu-toggle");
+        const drawerClose = document.getElementById("drawer-close");
+
+        function openDrawer() {
+            drawer.classList.add("is-open");
+            overlay.classList.add("is-visible");
+            document.body.classList.add("drawer-open");
+            drawer.removeAttribute("inert");
+            drawer.setAttribute("aria-hidden", "false");
+            menuToggle.setAttribute("aria-expanded", "true");
+            drawerClose.focus();
+        }
+
+        function closeDrawer() {
+            drawer.classList.remove("is-open");
+            overlay.classList.remove("is-visible");
+            document.body.classList.remove("drawer-open");
+            drawer.setAttribute("inert", "");
+            drawer.setAttribute("aria-hidden", "true");
+            menuToggle.setAttribute("aria-expanded", "false");
+            menuToggle.focus();
+        }
+
+        menuToggle.addEventListener("click", function () {
+            if (drawer.classList.contains("is-open")) {
+                closeDrawer();
+            } else {
+                openDrawer();
+            }
+        });
+
+        overlay.addEventListener("click", closeDrawer);
+        drawerClose.addEventListener("click", closeDrawer);
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && drawer.classList.contains("is-open")) {
+                closeDrawer();
+            }
+        });
+
+        let lastLightsSignature = null;
+        const statusBadge = document.getElementById("status-badge");
+
+        function setStatusBadge(text, state) {
+            statusBadge.textContent = text;
+            statusBadge.className = "status-badge" + (state ? " " + state : "");
+        }
+
+        function createLightCard(light) {
+            const isOn = Boolean(light.state && light.state.on);
+            const bri = Math.max(0, Math.min(254, Number(light.state && light.state.bri) || 0));
+            const percent = Math.round((bri / 254) * 100);
+            const name = light.name || ("Light " + light.id);
+
+            const card = document.createElement("article");
+            card.className = "light-item " + (isOn ? "is-on" : "is-off");
+            card.innerHTML = `
+                <div class="lamp-visual">${LAMP_ICON}</div>
+                <h3 class="light-name"></h3>
+                <div class="light-meta">
+                    <span class="state-pill">${isOn ? "On" : "Off"}</span>
+                    <span class="brightness">${isOn ? percent + "%" : "&mdash;"}</span>
+                </div>
+                <div class="brightness-track" aria-hidden="true">
+                    <div class="brightness-fill" style="width:${isOn ? percent : 0}%"></div>
+                </div>
+            `;
+            card.querySelector(".light-name").textContent = name;
+            card.setAttribute("aria-label", name + " is " + (isOn ? "on at " + percent + " percent brightness" : "off"));
+            return card;
+        }
+
         async function updateStatus() {
             try {
-                const response = await fetch('/api/status');
+                const response = await fetch("/api/status");
                 if (!response.ok) {
                     throw new Error(await response.text());
                 }
                 const data = await response.json();
-                document.getElementById('next-event').innerText = data.next_event
+                document.getElementById("next-event").textContent = data.next_event
                     ? new Date(data.next_event).toLocaleString()
-                    : 'Not scheduled';
-                const container = document.getElementById('lights-container');
+                    : "Not scheduled";
+
+                const container = document.getElementById("lights-container");
+
                 if (!data.configured) {
-                    container.innerHTML = '<p>No bridge configured. Scan and pair a bridge below.</p>';
+                    lastLightsSignature = null;
+                    setStatusBadge("Not configured", "is-idle");
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            ${LAMP_ICON}
+                            <p>No bridge configured yet. Open the menu to scan and pair a bridge.</p>
+                        </div>
+                    `;
                     return;
                 }
-                container.innerHTML = '';
+
+                setStatusBadge("Updating live");
+
+                const signature = JSON.stringify(data.lights);
+                if (signature === lastLightsSignature) {
+                    return;
+                }
+                lastLightsSignature = signature;
+
+                container.innerHTML = "";
                 if (data.lights.length === 0) {
-                    container.innerHTML = '<p>No lamps found.</p>';
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            ${LAMP_ICON}
+                            <p>No lamps found on this bridge.</p>
+                        </div>
+                    `;
                     return;
                 }
-                data.lights.forEach(light => {
-                    const div = document.createElement('div');
-                    div.className = 'light-item';
-                    const statusClass = light.state.on ? 'online' : 'offline';
-                    const statusText = light.state.on ? 'ON' : 'OFF';
-                    div.innerHTML = `<strong>${light.name || 'Light ' + light.id}</strong><br><span class="${statusClass}">${statusText}</span>`;
-                    container.appendChild(div);
+
+                data.lights.forEach(function (light) {
+                    container.appendChild(createLightCard(light));
                 });
             } catch (err) {
-                console.error('Error fetching status:', err);
+                console.error("Error fetching status:", err);
+                setStatusBadge("Connection lost", "is-error");
             }
         }
 
-        document.getElementById('scan-bridges-btn').addEventListener('click', async () => {
-            const btn = document.getElementById('scan-bridges-btn');
-            const list = document.getElementById('bridges-list');
-            btn.innerText = 'Scanning...';
-            list.innerHTML = '';
+        document.getElementById("scan-bridges-btn").addEventListener("click", async function () {
+            const btn = document.getElementById("scan-bridges-btn");
+            const list = document.getElementById("bridges-list");
+            btn.disabled = true;
+            btn.textContent = "Scanning...";
+            list.innerHTML = "";
+
             try {
-                const response = await fetch('/api/discover');
-                const bridges = await response.json();
-                if (bridges.length === 0) {
-                    list.innerHTML = '<li style="color: gray;">No bridges found.</li>';
-                } else {
-                    bridges.forEach((bridge, index) => {
-                        const li = document.createElement('li');
-                        li.innerHTML = `
-                            <div class="bridge-item">
-                                <span style="flex-grow: 1;">${bridge.name}</span>
-                                <span style="color: #666;">${bridge.ip}</span>
-                                <button class="pair-btn" onclick="pairBridge('${bridge.ip}', this)">Pair</button>
-                            </div>
-                        `;
-                        list.appendChild(li);
-                    });
+                const response = await fetch("/api/discover");
+                if (!response.ok) {
+                    throw new Error(await response.text());
                 }
+                const bridges = await response.json();
+
+                if (bridges.length === 0) {
+                    const item = document.createElement("li");
+                    item.className = "bridge-empty";
+                    item.textContent = "No bridges found. Make sure the bridge is on the same network.";
+                    list.appendChild(item);
+                    return;
+                }
+
+                bridges.forEach(function (bridge) {
+                    const item = document.createElement("li");
+                    const row = document.createElement("div");
+                    row.className = "bridge-item";
+
+                    const name = document.createElement("span");
+                    name.className = "bridge-name";
+                    name.textContent = bridge.name || "Hue Bridge";
+
+                    const ip = document.createElement("span");
+                    ip.className = "bridge-ip";
+                    ip.textContent = bridge.ip;
+
+                    const pairBtn = document.createElement("button");
+                    pairBtn.type = "button";
+                    pairBtn.className = "btn small";
+                    pairBtn.textContent = "Pair";
+                    pairBtn.addEventListener("click", function () {
+                        pairBridge(bridge.ip, pairBtn);
+                    });
+
+                    row.append(name, ip, pairBtn);
+                    item.appendChild(row);
+                    list.appendChild(item);
+                });
             } catch (err) {
-                console.error('Discovery error:', err);
-                list.innerHTML = '<li style="color: red;">Error scanning for bridges.</li>';
+                console.error("Discovery error:", err);
+                const item = document.createElement("li");
+                item.className = "bridge-empty";
+                item.textContent = "Error scanning for bridges.";
+                list.appendChild(item);
             } finally {
-                btn.innerText = 'Scan for Bridges';
+                btn.disabled = false;
+                btn.textContent = "Scan for Bridges";
             }
         });
 
         async function pairBridge(ip, button) {
-            const btn = button;
-            const originalText = btn.innerText;
-            btn.disabled = true;
-            btn.innerText = 'Pairing...';
-            
-            const discoverySection = document.getElementById('discovery-section');
-            let statusMsg = document.getElementById('pairing-status');
+            const originalText = button.textContent;
+            button.disabled = true;
+            button.textContent = "Pairing...";
+
+            const discoverySection = document.getElementById("discovery-section");
+            let statusMsg = document.getElementById("pairing-status");
             if (!statusMsg) {
-                statusMsg = document.createElement('p');
-                statusMsg.id = 'pairing-status';
+                statusMsg = document.createElement("p");
+                statusMsg.id = "pairing-status";
+                statusMsg.className = "status-message";
                 discoverySection.appendChild(statusMsg);
             }
-            statusMsg.innerText = 'Please press the pairing button on your Hue Bridge within 60 seconds...';
-            statusMsg.style.color = '#007bff';
+            statusMsg.className = "status-message info";
+            statusMsg.textContent = "Please press the pairing button on your Hue Bridge within 60 seconds...";
 
             try {
                 const formData = new FormData();
-                formData.append('bridge_ip', ip);
-                const response = await fetch('/api/join', {
-                    method: 'POST',
+                formData.append("bridge_ip", ip);
+                const response = await fetch("/api/join", {
+                    method: "POST",
                     body: formData
                 });
+
                 if (response.ok) {
                     const data = await response.json();
-                    document.getElementById('config-bridge-ip').value = data.bridge_ip;
-                    alert('Successfully paired!');
-                    statusMsg.innerText = 'Successfully joined.';
-                    statusMsg.style.color = 'green';
+                    document.getElementById("config-bridge-ip").value = data.bridge_ip;
+                    statusMsg.className = "status-message success";
+                    statusMsg.textContent = "Successfully joined.";
+                    alert("Successfully paired!");
                     updateStatus();
+                    closeDrawer();
                 } else {
                     const errorText = await response.text();
-                    alert('Failed to pair bridge: ' + errorText);
-                    statusMsg.innerText = 'Pairing failed: ' + errorText;
-                    statusMsg.style.color = 'red';
+                    statusMsg.className = "status-message error";
+                    statusMsg.textContent = "Pairing failed: " + errorText;
+                    alert("Failed to pair bridge: " + errorText);
                 }
             } catch (err) {
-                console.error('Pairing error:', err);
-                alert('Error during pairing.');
-                statusMsg.innerText = 'Error during pairing.';
-                statusMsg.style.color = 'red';
+                console.error("Pairing error:", err);
+                statusMsg.className = "status-message error";
+                statusMsg.textContent = "Error during pairing.";
+                alert("Error during pairing.");
             } finally {
-                btn.disabled = false;
-                btn.innerText = originalText;
+                button.disabled = false;
+                button.textContent = originalText;
             }
         }
 
-        document.getElementById('config-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        document.getElementById("config-form").addEventListener("submit", async function (event) {
+            event.preventDefault();
             try {
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    body: new FormData(e.target)
+                const response = await fetch("/api/config", {
+                    method: "POST",
+                    body: new FormData(event.target)
                 });
                 const text = await response.text();
                 if (!response.ok) {
-                    alert('Failed to save configuration: ' + text);
+                    alert("Failed to save configuration: " + text);
                     return;
                 }
                 alert(text);
                 updateStatus();
+                closeDrawer();
             } catch (err) {
-                console.error('Configuration error:', err);
-                alert('Error saving configuration.');
+                console.error("Configuration error:", err);
+                alert("Error saving configuration.");
             }
         });
 
         async function loadConfig() {
             try {
-                const response = await fetch('/api/config');
+                const response = await fetch("/api/config");
                 if (!response.ok) {
                     return;
                 }
                 const data = await response.json();
-                document.getElementById('config-bridge-ip').value = data.bridge_ip || '';
+                document.getElementById("config-bridge-ip").value = data.bridge_ip || "";
             } catch (err) {
-                console.error('Error loading configuration:', err);
+                console.error("Error loading configuration:", err);
             }
         }
 
