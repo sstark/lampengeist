@@ -107,6 +107,21 @@
         }
 
         .brand {
+            /* The type scale lives here so the ghost can be sized from the
+               same numbers as the text it stands next to. */
+            --brand-title: clamp(1.5rem, 4vw, 2rem);
+            --brand-title-leading: 1.15;
+            --brand-tagline: .9rem;
+            --brand-tagline-leading: 1.6;
+            --brand-tagline-gap: 2px;
+            --brand-tagline-lines: 1;
+            /* Title line box + the tagline's gap + its line boxes. */
+            --brand-height: calc(
+                var(--brand-title) * var(--brand-title-leading) +
+                var(--brand-tagline-gap) +
+                var(--brand-tagline) * var(--brand-tagline-leading) * var(--brand-tagline-lines)
+            );
+
             display: flex;
             align-items: center;
             gap: 13px;
@@ -120,24 +135,27 @@
             flex-shrink: 0;
         }
 
-        .brand-ghost {
-            width: 54px;
-            height: 54px;
+        /* Outruns .ghost-icon, which is declared later for the small inline
+           ghosts and would otherwise win on source order. */
+        .brand .brand-ghost {
+            width: var(--brand-height);
+            height: var(--brand-height);
             filter: drop-shadow(0 0 9px var(--accent-soft));
             animation-duration: 4.2s;
         }
 
         .brand h1 {
             margin: 0;
-            font-size: clamp(1.5rem, 4vw, 2rem);
+            font-size: var(--brand-title);
             letter-spacing: -.02em;
-            line-height: 1.15;
+            line-height: var(--brand-title-leading);
         }
 
         .brand p {
-            margin: 2px 0 0;
+            margin: var(--brand-tagline-gap) 0 0;
             color: var(--muted);
-            font-size: .9rem;
+            font-size: var(--brand-tagline);
+            line-height: var(--brand-tagline-leading);
         }
 
         .header-actions {
@@ -1240,16 +1258,18 @@
             }
 
             .brand {
+                /* Overriding the scale is enough: the ghost follows it. */
+                --brand-title: 1.35rem;
+                --brand-tagline-lines: 2;
                 gap: 10px;
             }
 
-            .brand h1 {
-                font-size: 1.35rem;
-            }
-
-            .brand-ghost {
-                width: 44px;
-                height: 44px;
+            /* The tagline has to wrap somewhere below this width anyway, so
+               it is pinned to two lines rather than left to break wherever
+               the viewport happens to put it. That keeps the line count in
+               --brand-tagline-lines true, and with it the ghost's height. */
+            .brand p {
+                max-width: 24ch;
             }
 
             main {
