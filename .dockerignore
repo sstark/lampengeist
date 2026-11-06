@@ -1,0 +1,14 @@
+# config.json holds the bridge token: keep it out of the build context.
+config.json*
+lampengeist
+bin/
+.claude
+.git
+.jj
+docs/
+*.md
+LICENSE
+lampengeist.service
+Dockerfile
+.dockerignore
+docker-compose.yaml

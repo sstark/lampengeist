@@ -165,6 +165,36 @@ Logs go to the journal:
 journalctl --user -u lampengeist -f
 ```
 
+## Running in Docker
+
+`docker-compose.yaml` builds the image and starts the daemon:
+
+```sh
+docker compose up -d --build
+```
+
+Then open <http://localhost:64057>, and set the bridge up through the menu as
+above. `config.json` is written into the `config` volume, so the pairing
+survives a rebuild or a `docker compose down`.
+
+Two things are worth checking before you leave it running:
+
+- **The time zone.** Window times are wall-clock times, and a container has no
+  reason to know yours. `TZ` defaults to `Europe/Berlin` in the compose file —
+  change it, or set `TZ` in the environment. The zone in force is shown next to
+  the simulated clock in the UI.
+- **Bridge discovery.** **Scan for Bridges** uses mDNS, which does not reach the
+  LAN from Docker's bridge network. It falls back to the Hue cloud, which only
+  works if your bridge has been online with it; manual setup always works. For
+  the local scan, drop `ports` and run the container on the host network
+  instead — there is a commented `network_mode: host` in the compose file.
+
+Logs:
+
+```sh
+docker compose logs -f
+```
+
 ## HTTP API
 
 The UI is built on these; they are stable enough to script against.

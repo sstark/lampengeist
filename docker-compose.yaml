@@ -1,0 +1,26 @@
+services:
+  lampengeist:
+    build: .
+    image: lampengeist
+    container_name: lampengeist
+    restart: unless-stopped
+    ports:
+      - "64057:64057"
+    environment:
+      # Routine windows are wall-clock times in this zone. Without it the
+      # container runs on UTC and a 06:20 wake-up fires at the wrong hour.
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      # config.json lives in here, so this is what survives a recreate.
+      # To keep the file somewhere you can see it, swap in a bind mount:
+      #   - ./data:/data
+      # and chown it to uid 10001 first, because the container runs unprivileged.
+      - config:/data
+
+    # Scanning for a bridge uses mDNS, which does not cross the bridge network;
+    # it falls back to the Hue cloud, and manual setup always works. If you want
+    # the local scan, drop `ports` above and run on the host network instead:
+    # network_mode: host
+
+volumes:
+  config:
