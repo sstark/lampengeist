@@ -56,10 +56,15 @@ works through the evidence in order of how much it can be trusted:
    (`office`, `kitchen`, `garden`, `kids_bedroom`, …). It is an enum picked
    from a list of icons, so it works whatever language you named things in.
 2. **The room's name**, against a vocabulary covering English, German, French,
-   Dutch, Polish, Czech, Italian, Spanish, Portuguese, Norwegian, Swedish and
-   Danish. Accents are folded, so `Küche`, `KUECHE` and `kuche` all land in the
-   same place, and names match inside compounds — `Schlafzimmerlampe`,
-   `keukenlamp`, `sovrumslampa`.
+   Dutch, Polish, Czech, Italian, Spanish, Portuguese, Romanian, Norwegian,
+   Swedish, Danish, Russian, Turkish, Mandarin, Japanese, Vietnamese, Thai,
+   Hindi, Urdu, Arabic and Swahili. Accents are folded, so `Küche`, `KUECHE`
+   and `kuche` all land in the same place, and names match inside compounds —
+   `Schlafzimmerlampe`, `keukenlamp`, `sovrumslampa`. Mandarin is listed in
+   both Simplified and Traditional (`客厅`, `客廳`); Arabic matches with or
+   without the vowel pointing (`غرفة`, `غُرْفَة`), Hindi with or without the
+   nukta (`दफ्तर`, `दफ़्तर`), and Vietnamese, Turkish and Romanian with their
+   marks either way (`Phòng ngủ`, `Çalışma odası`, `Bucătărie`).
 3. **Any zone the lamp is in.** People who name their rooms by floor
    ("Erdgeschoss") often do name their zones by purpose.
 4. **The lamp's own name** — a `Schreibtischlampe` in an otherwise unnamed room
