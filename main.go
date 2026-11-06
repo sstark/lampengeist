@@ -532,7 +532,7 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":64057",
 		Handler: mux,
 	}
 
@@ -542,7 +542,7 @@ func main() {
 			log.Fatalf("listen: %s\n", err)
 		}
 	}()
-	log.Println("Server started on :8080")
+	log.Println("Server started on :64057")
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)

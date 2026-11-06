@@ -100,7 +100,7 @@ go build -o lampengeist .
 ./lampengeist
 ```
 
-Then open <http://localhost:8080>.
+Then open <http://localhost:64057>.
 
 On first run there is no bridge configured. Open the menu (top right):
 
@@ -124,7 +124,7 @@ only has to happen once.
 | `simulation_lights` | Per-lamp opt-out; lamps not listed take part |
 | `enabled` | Written on setup, not currently read |
 
-The web server listens on `:8080`. That is not configurable yet.
+The web server listens on `:64057`. That is not configurable yet.
 
 ## Running as a service
 
