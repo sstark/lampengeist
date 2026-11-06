@@ -40,6 +40,12 @@ Two details keep it from looking mechanical:
   room coming on at once does not look like somebody walking through a house —
   and it spikes bridge traffic.
 
+Window times are **wall-clock times in your machine's time zone**, taken from
+the system (`$TZ`, otherwise `/etc/localtime`) — there is nothing to configure.
+A 06:20 wake-up stays 06:20 across daylight-saving changes rather than sliding
+an hour, and the zone currently in force is shown next to the simulated clock
+so you can check the daemon picked up the one you expected.
+
 ## How your lamps get placed
 
 Routines think in room *kinds* — bedroom, bathroom, kitchen, living room,

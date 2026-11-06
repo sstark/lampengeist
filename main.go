@@ -91,6 +91,7 @@ type simulationStatus struct {
 	Speed             int             `json:"speed"`
 	SimulatedMinute   float64         `json:"simulated_minute"`
 	SimulatedDayLabel string          `json:"simulated_day_label"`
+	Timezone          string          `json:"timezone"`
 	ClockOffset       string          `json:"clock_offset"`
 	NextEventIn       float64         `json:"next_event_in"`
 	NextEventMinute   float64         `json:"next_event_minute"`
@@ -748,6 +749,7 @@ func buildSimulationStatus(snapshot presence.Snapshot, view lightsView, schedule
 		Speed:             snapshot.Speed,
 		SimulatedMinute:   minuteOfDay(simulated),
 		SimulatedDayLabel: simulated.Format("Mon, 2 Jan"),
+		Timezone:          describeTimezone(simulated),
 		ClockOffset:       describeClockOffset(simulated, time.Now()),
 		NextEventIn:       snapshot.NextEventIn.Seconds(),
 		NextEventMinute:   minuteOfDay(snapshot.NextEventSimulated),
@@ -835,6 +837,20 @@ func buildActivity(events []presence.Event) []activityEntry {
 		})
 	}
 	return entries
+}
+
+// describeTimezone names the zone the routine is being scheduled in, for
+// example "CET (UTC+01:00)". It is shown next to the clock because the zone is
+// taken from the system rather than configured here: running as a service,
+// that is the one thing about the schedule the UI cannot otherwise confirm.
+//
+// The abbreviation and offset are read from the given moment, not from now, so
+// a fast-forwarded clock reports the zone actually in force on the simulated
+// day. There is no portable way to recover the IANA name of time.Local — Go
+// reports it as "Local" once loaded from /etc/localtime — and the abbreviation
+// identifies the zone well enough to spot a wrongly configured host.
+func describeTimezone(at time.Time) string {
+	return fmt.Sprintf("%s (UTC%s)", at.Format("MST"), at.Format("-07:00"))
 }
 
 // describeClockOffset summarises how far the simulated clock has run from

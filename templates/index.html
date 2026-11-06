@@ -1887,6 +1887,7 @@
             simClockMeta.append(
                 day,
                 document.createTextNode(" · " + describeRate(speed) +
+                    (sim.timezone ? " · " + sim.timezone : "") +
                     (sim.clock_offset ? " · " + sim.clock_offset : ""))
             );
 

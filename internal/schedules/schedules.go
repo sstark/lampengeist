@@ -4,6 +4,12 @@
 // room categories; the simulator then picks a subset of the lamps in those
 // rooms and keeps them on until the window ends. Windows are jittered per day
 // so the routine does not run at exactly the same minute every day.
+//
+// Window times are wall-clock times in the zone of the time passed in, which
+// everywhere in Lampengeist is the system zone that Go loads into time.Local
+// (from $TZ, else /etc/localtime). A routine therefore follows the household's
+// own day, daylight-saving changes included, and nothing about the time zone
+// needs configuring here.
 package schedules
 
 import (
@@ -388,7 +394,17 @@ func (w Window) occurrence(midnight time.Time, index int) (time.Time, time.Time)
 		durationMinutes = 5
 	}
 
-	start := midnight.Add(time.Duration(w.StartMinute+startJitter) * time.Minute)
+	// Window starts are wall-clock times in the system zone: a 06:20 wake-up
+	// has to stay 06:20 for whoever lives there. Adding the minutes to
+	// midnight as an elapsed duration would instead shift the whole routine by
+	// an hour on the two days a year a DST change makes the calendar day 23 or
+	// 25 hours long. time.Date works in wall-clock terms, and also resolves
+	// the gap hour of a spring-forward, where 02:30 does not exist at all.
+	//
+	// The duration stays an elapsed one: someone in the kitchen for an hour is
+	// there for an hour, whatever the clock does meanwhile.
+	start := time.Date(midnight.Year(), midnight.Month(), midnight.Day(),
+		0, w.StartMinute+startJitter, 0, 0, midnight.Location())
 	return start, start.Add(time.Duration(durationMinutes) * time.Minute)
 }
 

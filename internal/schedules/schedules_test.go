@@ -90,6 +90,60 @@ func TestActiveAtAgreesWithOccurrences(t *testing.T) {
 	}
 }
 
+// TestOccurrenceKeepsWallClockStartAcrossDST pins the behaviour that makes a
+// routine follow the household's own clock. Computing a start by adding
+// elapsed minutes to midnight drags every window an hour off on the two days a
+// year the calendar day is not 24 hours long, so a 06:20 wake-up fired at
+// 07:20 in spring and 05:20 in autumn.
+func TestOccurrenceKeepsWallClockStartAcrossDST(t *testing.T) {
+	// Europe/Berlin rather than time.Local: the test has to assert the same
+	// thing whatever zone the machine running it is in.
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skipf("Europe/Berlin zone data unavailable: %v", err)
+	}
+
+	days := map[string]time.Time{
+		"regular":        time.Date(2024, 3, 30, 0, 0, 0, 0, berlin),
+		"spring_forward": time.Date(2024, 3, 31, 0, 0, 0, 0, berlin),  // 02:00 -> 03:00
+		"fall_back":      time.Date(2024, 10, 27, 0, 0, 0, 0, berlin), // 03:00 -> 02:00
+	}
+
+	// The widest jitter occurrence() applies to a start time.
+	const maxJitterMinutes = 10
+
+	for name, midnight := range days {
+		t.Run(name, func(t *testing.T) {
+			for _, definition := range All() {
+				for index, window := range definition.Windows {
+					start, _ := window.occurrence(midnight, index)
+
+					drift := minutesBetweenOnClock(window.StartMinute, start)
+					if drift > maxJitterMinutes {
+						t.Errorf("%s window %d: start %s is %d wall-clock minutes from %02d:%02d, want at most %d",
+							definition.ID, index, start.Format("15:04 MST"), drift,
+							window.StartMinute/60, window.StartMinute%60, maxJitterMinutes)
+					}
+				}
+			}
+		})
+	}
+}
+
+// minutesBetweenOnClock returns how far the wall-clock time of actual is from
+// the given minute of the day, measured the short way around the clock so a
+// window jittered back across midnight is not reported as a 24-hour drift.
+func minutesBetweenOnClock(wantMinute int, actual time.Time) int {
+	actualMinute := actual.Hour()*60 + actual.Minute()
+
+	difference := actualMinute - wantMinute
+	difference = ((difference % 1440) + 1440) % 1440
+	if difference > 720 {
+		difference = 1440 - difference
+	}
+	return difference
+}
+
 func TestDesiredStatesOnlyLightsActiveRooms(t *testing.T) {
 	roomOfLight := map[string]RoomKind{
 		"kitchen-1": Kitchen,
