@@ -206,3 +206,10 @@ templates/index.html         the whole UI
 
 The screenshots above were taken against a stand-in bridge, with the simulation
 fast-forwarded to a Friday evening.
+
+## LLM Disclaimer
+
+This project is an experiment and none of the code was written by a human.
+However, I (the author, which I still consider myself to be) check and test the
+LLM-generated code before committing it. An exception are tests, which I check
+only very briefly.
