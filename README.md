@@ -128,14 +128,30 @@ The web server listens on `:8080`. That is not configurable yet.
 
 ## Running as a service
 
-`lampengeist.service` is a systemd unit that runs the binary as an ordinary
-user. Adjust `User`, `ExecStart` and `WorkingDirectory` to match where you put
-it — the working directory matters, because that is where `config.json` is read
-and written.
+`lampengeist.service` is a systemd **user** unit — no root needed, and it runs
+as you. It expects the binary at `~/git/lampengeist/lampengeist`; adjust
+`ExecStart` and `WorkingDirectory` if you keep it elsewhere. The working
+directory matters, because that is where `config.json` is read and written.
 
 ```sh
-sudo cp lampengeist.service /etc/systemd/system/
-sudo systemctl enable --now lampengeist
+mkdir -p ~/.config/systemd/user
+cp lampengeist.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now lampengeist
+```
+
+User services normally stop when you log out, which is no good for something
+that is supposed to be watching the house. Enable lingering once so it starts
+at boot and keeps running without a session:
+
+```sh
+sudo loginctl enable-linger $USER
+```
+
+Logs go to the journal:
+
+```sh
+journalctl --user -u lampengeist -f
 ```
 
 ## HTTP API

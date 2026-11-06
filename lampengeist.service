@@ -1,13 +1,13 @@
 [Unit]
 Description=Lampengeist Presence Simulation
-After=network.target
 
 [Service]
-ExecStart=/home/seb/git/lampengeist/lampengeist
-WorkingDirectory=/home/seb/git/lampengeist
+# %h is the user's home directory. Adjust if you keep the binary elsewhere;
+# WorkingDirectory is where config.json is read and written.
+ExecStart=%h/git/lampengeist/lampengeist
+WorkingDirectory=%h/git/lampengeist
 Restart=always
 RestartSec=5
-User=seb
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
